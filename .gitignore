@@ -219,9 +219,12 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Claude Code local state (skill symlinks into .venv, worktrees, locks)
-.agents/
-.claude/skills/
+# Claude Code local state: worktrees, locks, local-only settings, and
+# skill symlinks auto-generated into .venv (name each symlink explicitly
+# rather than ignoring skills/ wholesale, so a hand-authored project skill
+# placed there still gets tracked)
+.agents/skills/developing-with-streamlit
+.claude/skills/developing-with-streamlit
 .claude/worktrees/
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
