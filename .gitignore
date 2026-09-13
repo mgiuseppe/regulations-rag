@@ -218,3 +218,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Claude Code local state (skill symlinks into .venv, worktrees, locks)
+.agents/
+.claude/skills/
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
