@@ -1,0 +1,20 @@
+[project]
+name = "regulations-rag"
+version = "0.1.0"
+description = "This project helps the users understand EU and national regulations in the label industry"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "docling>=2.126.0",
+    "openai>=3.13.0",
+    "python-dotenv>=1.2.3",
+    "qdrant-client>=1.19.0",
+    "streamlit>=1.63.0",
+    "tiktoken>=0.14.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-mock>=3.15.1",
+]
