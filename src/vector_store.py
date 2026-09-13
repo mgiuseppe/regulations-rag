@@ -5,6 +5,7 @@ from qdrant_client.models import (
     Filter,
     MatchValue,
     PointStruct,
+    ScoredPoint,
     VectorParams,
 )
 
@@ -55,3 +56,14 @@ def delete_by_source_file(client: QdrantClient, source_file: str) -> None:
 
 def upsert_points(client: QdrantClient, points: list[PointStruct]) -> None:
     client.upsert(collection_name=QDRANT_COLLECTION, points=points)
+
+
+def search(client: QdrantClient, query_vector: list[float], top_n: int) -> list[ScoredPoint]:
+    if not client.collection_exists(QDRANT_COLLECTION):
+        return []
+    return client.query_points(
+        collection_name=QDRANT_COLLECTION,
+        query=query_vector,
+        limit=top_n,
+        with_payload=True,
+    ).points
