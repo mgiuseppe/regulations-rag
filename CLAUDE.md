@@ -25,7 +25,11 @@ chunk text).
 data/raw/              source PDFs to ingest
 src/ingestion.py       business logic: hash check, parse, chunk, embed, upsert in qdrant
 src/retrieval.py       business logic: semantic search + generation
-src/qdrant_client.py   wrapper: Qdrant connection and operations
+src/vector_store.py    wrapper: Qdrant connection and operations
+                       (named vector_store.py, not qdrant_client.py, to avoid
+                       shadowing the qdrant-client pip package — Streamlit
+                       inserts src/ at the front of sys.path when running
+                       src/app.py, which would otherwise cause a self-import)
 src/app.py             Streamlit entrypoint (multipage nav)
 src/pages/chat.py      UI: chat, calls retrieval.py, shows answer + citations
 src/pages/ingest.py    UI: ingestion, calls ingestion.py, shows cost + Confirm button
