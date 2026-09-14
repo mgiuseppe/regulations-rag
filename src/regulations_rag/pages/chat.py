@@ -1,9 +1,9 @@
 import streamlit as st
 from openai import OpenAI
 
-from src import retrieval, vector_store
-from src.config import TOP_N_CHUNKS
-from src.retrieval import Message
+from regulations_rag import retrieval, vector_store
+from regulations_rag.config import TOP_N_CHUNKS
+from regulations_rag.retrieval import Message
 
 st.title("Chat")
 
