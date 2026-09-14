@@ -3,7 +3,6 @@ import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 import tiktoken
 from docling.datamodel.base_models import InputFormat
@@ -29,17 +28,11 @@ MAX_TOKENS_PER_EMBEDDING_REQUEST = 250_000
 # OpenAI also caps the number of inputs per embeddings request at 2048.
 MAX_ITEMS_PER_EMBEDDING_REQUEST = 2048
 
-IngestStatus = Literal["up_to_date", "stale", "new"]
-
 
 @dataclass
 class Chunk:
     page: int
     text: str
-
-
-def scan_raw_files(directory: Path = RAW_DATA_DIR) -> list[Path]:
-    return sorted(directory.glob("*.pdf"))
 
 
 def candidate_title_from_filename(filename: str) -> str:
@@ -50,14 +43,6 @@ def candidate_title_from_filename(filename: str) -> str:
 
 def compute_file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def check_status(existing_hash: str | None, new_hash: str) -> IngestStatus:
-    if existing_hash is None:
-        return "new"
-    if existing_hash == new_hash:
-        return "up_to_date"
-    return "stale"
 
 
 def _convert(path: Path, do_ocr: bool):
@@ -150,16 +135,12 @@ def ingest_file(
     title: str,
     chunks: list[Chunk],
     file_hash: str,
-    status: IngestStatus,
+    document_id: str,
     embedding_config: EmbeddingModelConfig,
     qdrant_client,
     openai_client: OpenAI,
 ) -> None:
     source_file = path.name
-
-    if status == "stale":
-        vector_store.delete_by_source_file(qdrant_client, source_file)
-
     vectors = embed_chunks(chunks, embedding_config, openai_client)
 
     points = [
@@ -167,6 +148,7 @@ def ingest_file(
             id=str(uuid.uuid4()),
             vector=vector,
             payload={
+                "document_id": document_id,
                 "title": title,
                 "source_file": source_file,
                 "content_hash": file_hash,
