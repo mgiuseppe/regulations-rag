@@ -15,6 +15,12 @@ chunk text).
 - gpt-5-nano for generation
 - Streamlit for the UI
 
+## Workflow
+- Never commit directly to `main`. Every change is done on a feature branch
+  created from `main` (e.g. `feature/short-description`, `fix/short-description`).
+- Open a pull request into `main` and merge through the PR (not a local merge/push
+  to `main`), even for small changes.
+
 ## Important rules
 - The LLM must answer ONLY using the retrieved chunks (never from its own knowledge)
 - If the context is insufficient, it must say so explicitly, not make things up
