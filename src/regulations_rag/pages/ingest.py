@@ -5,10 +5,12 @@ from openai import OpenAI
 
 from regulations_rag import ingestion, vector_store
 from regulations_rag.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_MODELS
+from regulations_rag.documents_repository import DocumentsRepository
 
 st.title("Ingest regulations")
 
 embedding_config = EMBEDDING_MODELS[DEFAULT_EMBEDDING_MODEL]
+documents_repo = DocumentsRepository()
 
 
 @st.cache_data(show_spinner=False)
@@ -109,6 +111,12 @@ for path in files:
     total_cost += cost
     st.write(f"{tokens:,} tokens (~${cost:.4f})")
 
+    replace_document_id = (
+        replace_target["key"]
+        if replace_target and replace_target["key_field"] == "document_id"
+        else None
+    )
+
     to_process.append(
         {
             "path": path,
@@ -117,6 +125,7 @@ for path in files:
             "file_hash": file_hash,
             "action": action,
             "replace_point_ids": replace_point_ids,
+            "replace_document_id": replace_document_id,
         }
     )
 
@@ -127,31 +136,52 @@ if to_process:
     if st.button("Confirm"):
         openai_client = OpenAI()
         progress = st.progress(0.0)
+        errors = []
         for i, item in enumerate(to_process):
             with st.spinner(f"Embedding {item['path'].name}..."):
-                # Every ingested document gets its own fresh GUID as document_id,
-                # regardless of whether it's replacing an older document.
-                document_id = str(uuid.uuid4())
-
-                ingestion.ingest_file(
-                    path=item["path"],
-                    title=item["title"],
-                    chunks=item["chunks"],
-                    file_hash=item["file_hash"],
-                    document_id=document_id,
-                    embedding_config=embedding_config,
-                    qdrant_client=qdrant_client,
-                    openai_client=openai_client,
-                )
-
-                # Insert before delete: Qdrant has no transactions, so this
-                # avoids a window where the document is missing entirely if
-                # something fails mid-way.
-                if item["action"] == "replace":
-                    vector_store.delete_points(qdrant_client, item["replace_point_ids"])
+                try:
+                    if item["action"] == "replace":
+                        # A document replacing one ingested before document_id
+                        # existed (Qdrant-only, keyed by source_file) has no
+                        # prior id to keep, so it gets a fresh one.
+                        document_id = item["replace_document_id"] or str(uuid.uuid4())
+                        ingestion.replace_document(
+                            path=item["path"],
+                            title=item["title"],
+                            chunks=item["chunks"],
+                            file_hash=item["file_hash"],
+                            document_id=document_id,
+                            embedding_config=embedding_config,
+                            qdrant_client=qdrant_client,
+                            openai_client=openai_client,
+                            documents_repo=documents_repo,
+                        )
+                        # New points are inserted before old ones are deleted:
+                        # Qdrant has no transactions, so this avoids a window
+                        # where the document is missing entirely if something
+                        # fails mid-way.
+                        vector_store.delete_points(qdrant_client, item["replace_point_ids"])
+                    else:
+                        document_id = str(uuid.uuid4())
+                        ingestion.ingest_new_document(
+                            path=item["path"],
+                            title=item["title"],
+                            chunks=item["chunks"],
+                            file_hash=item["file_hash"],
+                            document_id=document_id,
+                            embedding_config=embedding_config,
+                            qdrant_client=qdrant_client,
+                            openai_client=openai_client,
+                            documents_repo=documents_repo,
+                        )
+                except Exception as exc:
+                    errors.append(f"{item['path'].name}: {exc}")
             progress.progress((i + 1) / len(to_process))
         st.session_state.uploaded_paths = []
-        st.success("Ingestion complete")
+        if errors:
+            st.error("Some files failed to ingest:\n" + "\n".join(f"- {e}" for e in errors))
+        else:
+            st.success("Ingestion complete")
         st.rerun()
 else:
     st.info("Nothing to ingest — all files are up to date.")

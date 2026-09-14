@@ -15,6 +15,7 @@ from qdrant_client.models import PointStruct
 
 from regulations_rag import vector_store
 from regulations_rag.config import EmbeddingModelConfig
+from regulations_rag.documents_repository import DocumentRecord, DocumentsRepository
 
 RAW_DATA_DIR = Path("data/raw")
 
@@ -159,3 +160,79 @@ def ingest_file(
         for chunk, vector in zip(chunks, vectors)
     ]
     vector_store.upsert_points(qdrant_client, points)
+
+
+def ingest_new_document(
+    path: Path,
+    title: str,
+    chunks: list[Chunk],
+    file_hash: str,
+    document_id: str,
+    embedding_config: EmbeddingModelConfig,
+    qdrant_client,
+    openai_client: OpenAI,
+    documents_repo: DocumentsRepository,
+) -> DocumentRecord:
+    """Ingest a brand-new document: row goes pending -> indexed, or -> failed
+    with the error message on any exception. Never left pending.
+    """
+    documents_repo.create_pending(document_id, path.name, title, file_hash)
+    try:
+        ingest_file(
+            path=path,
+            title=title,
+            chunks=chunks,
+            file_hash=file_hash,
+            document_id=document_id,
+            embedding_config=embedding_config,
+            qdrant_client=qdrant_client,
+            openai_client=openai_client,
+        )
+    except Exception as exc:
+        documents_repo.mark_failed(document_id, str(exc))
+        raise
+    return documents_repo.mark_indexed(document_id, len(chunks))
+
+
+def replace_document(
+    path: Path,
+    title: str,
+    chunks: list[Chunk],
+    file_hash: str,
+    document_id: str,
+    embedding_config: EmbeddingModelConfig,
+    qdrant_client,
+    openai_client: OpenAI,
+    documents_repo: DocumentsRepository,
+) -> DocumentRecord:
+    """Replace an existing document's content, keeping the same document_id.
+
+    Qdrant has no transactions, so the new chunks are written first; the
+    Postgres row is updated only after that succeeds; the caller is then
+    responsible for deleting the old Qdrant points, only after this returns
+    successfully. If writing the new chunks fails, the exception propagates
+    and the existing Postgres row (and old Qdrant chunks) are left untouched
+    — the old document stays valid.
+    """
+    ingest_file(
+        path=path,
+        title=title,
+        chunks=chunks,
+        file_hash=file_hash,
+        document_id=document_id,
+        embedding_config=embedding_config,
+        qdrant_client=qdrant_client,
+        openai_client=openai_client,
+    )
+    if documents_repo.get_by_id(document_id) is None:
+        # Document existed only in Qdrant (ingested before Postgres tracking
+        # was added) — create its Postgres row now.
+        documents_repo.create_pending(document_id, path.name, title, file_hash)
+        return documents_repo.mark_indexed(document_id, len(chunks))
+    return documents_repo.update_indexed(
+        document_id=document_id,
+        filename=path.name,
+        title=title,
+        content_hash=file_hash,
+        chunk_count=len(chunks),
+    )
