@@ -1,8 +1,8 @@
 import streamlit as st
 from openai import OpenAI
 
-from src import ingestion, vector_store
-from src.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_MODELS
+from regulations_rag import ingestion, vector_store
+from regulations_rag.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_MODELS
 
 st.title("Ingest regulations")
 

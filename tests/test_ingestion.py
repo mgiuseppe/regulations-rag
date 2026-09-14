@@ -3,9 +3,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from src import ingestion
-from src.config import EmbeddingModelConfig
-from src.ingestion import Chunk
+from regulations_rag import ingestion
+from regulations_rag.config import EmbeddingModelConfig
+from regulations_rag.ingestion import Chunk
 
 FAKE_EMBEDDING_CONFIG = EmbeddingModelConfig(
     name="text-embedding-3-small",
@@ -84,10 +84,10 @@ def test_embed_chunks_empty_list_skips_api_call():
 
 
 def test_ingest_file_stale_deletes_before_upsert(mocker):
-    mock_delete = mocker.patch("src.vector_store.delete_by_source_file")
-    mock_upsert = mocker.patch("src.vector_store.upsert_points")
+    mock_delete = mocker.patch("regulations_rag.vector_store.delete_by_source_file")
+    mock_upsert = mocker.patch("regulations_rag.vector_store.upsert_points")
     mocker.patch(
-        "src.ingestion.embed_chunks",
+        "regulations_rag.ingestion.embed_chunks",
         return_value=[[0.1, 0.2], [0.3, 0.4]],
     )
 
@@ -121,9 +121,9 @@ def test_ingest_file_stale_deletes_before_upsert(mocker):
 
 
 def test_ingest_file_new_does_not_delete(mocker):
-    mock_delete = mocker.patch("src.vector_store.delete_by_source_file")
-    mocker.patch("src.vector_store.upsert_points")
-    mocker.patch("src.ingestion.embed_chunks", return_value=[[0.1, 0.2]])
+    mock_delete = mocker.patch("regulations_rag.vector_store.delete_by_source_file")
+    mocker.patch("regulations_rag.vector_store.upsert_points")
+    mocker.patch("regulations_rag.ingestion.embed_chunks", return_value=[[0.1, 0.2]])
 
     ingestion.ingest_file(
         path=Path("data/raw/reach.pdf"),

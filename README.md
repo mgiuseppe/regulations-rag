@@ -59,7 +59,7 @@ docker run -p 6333:6333 -p 6334:6334 -v "$(pwd)/qdrant_storage:/qdrant/storage" 
 
 ```bash
 # add source PDFs to data/raw/, then start the app
-uv run streamlit run src/app.py
+uv run streamlit run src/regulations_rag/app.py
 ```
 
 Open the app in your browser, use the **Ingest** page to load documents into
@@ -68,16 +68,16 @@ Qdrant, then use the **Chat** page to ask questions.
 ## Project structure
 
 ```
-data/raw/              source PDFs to ingest
-src/ingestion.py       business logic: hash check, parse, chunk, embed, upsert in qdrant
-src/retrieval.py       business logic: semantic search + generation
-src/vector_store.py    wrapper: Qdrant connection and operations
-src/app.py             Streamlit entrypoint (multipage nav)
-src/pages/chat.py      UI: chat, calls retrieval.py, shows answer + citations
-src/pages/ingest.py    UI: ingestion, calls ingestion.py, shows cost + Confirm button
-evals/                 evals and golden dataset
-doc/                   specs
-tests/                 unit tests
+data/raw/                                source PDFs to ingest
+src/regulations_rag/ingestion.py         business logic: hash check, parse, chunk, embed, upsert in qdrant
+src/regulations_rag/retrieval.py         business logic: semantic search + generation
+src/regulations_rag/vector_store.py      wrapper: Qdrant connection and operations
+src/regulations_rag/app.py               Streamlit entrypoint (multipage nav)
+src/regulations_rag/pages/chat.py        UI: chat, calls retrieval.py, shows answer + citations
+src/regulations_rag/pages/ingest.py      UI: ingestion, calls ingestion.py, shows cost + Confirm button
+evals/                                   evals and golden dataset
+doc/                                     specs
+tests/                                   unit tests
 ```
 
 ## Development

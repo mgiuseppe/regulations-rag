@@ -9,7 +9,7 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-from src.config import QDRANT_COLLECTION, QDRANT_HOST, QDRANT_PORT, VECTOR_SIZE
+from regulations_rag.config import QDRANT_COLLECTION, QDRANT_HOST, QDRANT_PORT, VECTOR_SIZE
 
 
 def get_client() -> QdrantClient:
