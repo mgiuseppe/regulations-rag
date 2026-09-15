@@ -5,10 +5,13 @@ description = "This project helps the users understand EU and national regulatio
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.14.0",
     "docling>=2.126.0",
     "openai>=3.13.0",
+    "psycopg[binary]>=3.2.0",
     "python-dotenv>=1.2.3",
     "qdrant-client>=1.19.0",
+    "sqlalchemy>=2.0.0",
     "streamlit>=1.63.0",
     "tiktoken>=0.14.0",
 ]
