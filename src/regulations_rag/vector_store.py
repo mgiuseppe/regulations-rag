@@ -4,8 +4,10 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     MatchValue,
+    PayloadSchemaType,
     PointIdsList,
     PointStruct,
+    Record,
     ScoredPoint,
     VectorParams,
 )
@@ -13,6 +15,7 @@ from qdrant_client.models import (
 from regulations_rag.config import QDRANT_COLLECTION, QDRANT_HOST, QDRANT_PORT, VECTOR_SIZE
 
 SCROLL_PAGE_SIZE = 256
+CHUNKS_PAGE_SIZE = 20
 
 
 def get_client() -> QdrantClient:
@@ -25,6 +28,11 @@ def ensure_collection(client: QdrantClient) -> None:
             collection_name=QDRANT_COLLECTION,
             vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
         )
+    client.create_payload_index(
+        collection_name=QDRANT_COLLECTION,
+        field_name="document_id",
+        field_schema=PayloadSchemaType.KEYWORD,
+    )
 
 
 def _iter_all_points(client: QdrantClient):
@@ -87,6 +95,49 @@ def find_matches(
         if matched_on:
             matches.append({**document, "matched_on": matched_on})
     return matches
+
+
+def get_document(client: QdrantClient, document_id: str) -> dict | None:
+    """Return the metadata of one ingested document, identified by document_id."""
+    if not client.collection_exists(QDRANT_COLLECTION):
+        return None
+    points, _ = client.scroll(
+        collection_name=QDRANT_COLLECTION,
+        scroll_filter=Filter(
+            must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+        ),
+        limit=1,
+        with_payload=True,
+    )
+    if not points:
+        return None
+    payload = points[0].payload or {}
+    return {
+        "document_id": document_id,
+        "title": payload.get("title"),
+        "source_file": payload.get("source_file"),
+        "content_hash": payload.get("content_hash"),
+    }
+
+
+def scroll_document_chunks(
+    client: QdrantClient, document_id: str, cursor: str | int | None = None
+) -> tuple[list[Record], str | int | None]:
+    """Return one page of chunks for a document, plus a cursor for the next page
+    (None once there are no more chunks).
+    """
+    if not client.collection_exists(QDRANT_COLLECTION):
+        return [], None
+    points, next_cursor = client.scroll(
+        collection_name=QDRANT_COLLECTION,
+        scroll_filter=Filter(
+            must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+        ),
+        limit=CHUNKS_PAGE_SIZE,
+        with_payload=True,
+        offset=cursor,
+    )
+    return points, next_cursor
 
 
 def get_document_point_ids(client: QdrantClient, key_field: str, key: str) -> list[str]:

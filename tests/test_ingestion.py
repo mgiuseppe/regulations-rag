@@ -104,4 +104,6 @@ def test_ingest_file_upserts_points_with_document_id(mocker):
         "content_hash": "deadbeef",
         "page": 1,
         "text": "one",
+        "chunk_number": 0,
     }
+    assert points[1].payload["chunk_number"] == 1

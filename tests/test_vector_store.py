@@ -150,3 +150,71 @@ def test_delete_points_skips_call_when_no_ids(mocker):
     vector_store.delete_points(fake_client, [])
 
     fake_client.delete.assert_not_called()
+
+
+def test_get_document_returns_metadata_for_matching_document():
+    points = [
+        make_point(
+            {
+                "document_id": "doc-1",
+                "title": "PPWR",
+                "source_file": "ppwr.pdf",
+                "content_hash": "abc",
+            }
+        )
+    ]
+    client = make_client(points)
+
+    document = vector_store.get_document(client, "doc-1")
+
+    assert document == {
+        "document_id": "doc-1",
+        "title": "PPWR",
+        "source_file": "ppwr.pdf",
+        "content_hash": "abc",
+    }
+
+
+def test_get_document_returns_none_when_not_found():
+    client = SimpleNamespace(
+        collection_exists=lambda name: True,
+        scroll=lambda **kwargs: ([], None),
+    )
+
+    assert vector_store.get_document(client, "missing") is None
+
+
+def test_get_document_returns_none_when_collection_missing():
+    client = SimpleNamespace(collection_exists=lambda name: False)
+
+    assert vector_store.get_document(client, "doc-1") is None
+
+
+def test_scroll_document_chunks_filters_by_document_id_and_returns_cursor():
+    points = [make_point({"text": "chunk text"})]
+    scroll_calls = []
+
+    def scroll(**kwargs):
+        scroll_calls.append(kwargs)
+        return points, "next-cursor"
+
+    client = SimpleNamespace(collection_exists=lambda name: True, scroll=scroll)
+
+    result_points, next_cursor = vector_store.scroll_document_chunks(client, "doc-1", cursor="c0")
+
+    assert result_points == points
+    assert next_cursor == "next-cursor"
+    assert scroll_calls[0]["offset"] == "c0"
+    assert scroll_calls[0]["limit"] == vector_store.CHUNKS_PAGE_SIZE
+    filter_condition = scroll_calls[0]["scroll_filter"].must[0]
+    assert filter_condition.key == "document_id"
+    assert filter_condition.match.value == "doc-1"
+
+
+def test_scroll_document_chunks_returns_empty_when_collection_missing():
+    client = SimpleNamespace(collection_exists=lambda name: False)
+
+    points, next_cursor = vector_store.scroll_document_chunks(client, "doc-1")
+
+    assert points == []
+    assert next_cursor is None
