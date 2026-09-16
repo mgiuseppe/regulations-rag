@@ -107,3 +107,125 @@ def test_ingest_file_upserts_points_with_document_id(mocker):
         "chunk_number": 0,
     }
     assert points[1].payload["chunk_number"] == 1
+
+
+def test_ingest_new_document_marks_indexed_on_success(mocker):
+    mocker.patch("regulations_rag.ingestion.ingest_file")
+    fake_repo = mocker.Mock()
+
+    chunks = [Chunk(page=1, text="one"), Chunk(page=2, text="two")]
+    ingestion.ingest_new_document(
+        path=Path("data/raw/ppwr.pdf"),
+        title="PPWR",
+        chunks=chunks,
+        file_hash="deadbeef",
+        document_id="doc-123",
+        embedding_config=FAKE_EMBEDDING_CONFIG,
+        qdrant_client=object(),
+        openai_client=object(),
+        documents_repo=fake_repo,
+    )
+
+    fake_repo.create_pending.assert_called_once_with("doc-123", "ppwr.pdf", "PPWR", "deadbeef")
+    fake_repo.mark_indexed.assert_called_once_with("doc-123", 2)
+    fake_repo.mark_failed.assert_not_called()
+
+
+def test_ingest_new_document_marks_failed_on_exception(mocker):
+    mocker.patch(
+        "regulations_rag.ingestion.ingest_file", side_effect=RuntimeError("embedding blew up")
+    )
+    fake_repo = mocker.Mock()
+
+    with pytest.raises(RuntimeError):
+        ingestion.ingest_new_document(
+            path=Path("data/raw/ppwr.pdf"),
+            title="PPWR",
+            chunks=[Chunk(page=1, text="one")],
+            file_hash="deadbeef",
+            document_id="doc-123",
+            embedding_config=FAKE_EMBEDDING_CONFIG,
+            qdrant_client=object(),
+            openai_client=object(),
+            documents_repo=fake_repo,
+        )
+
+    fake_repo.create_pending.assert_called_once()
+    fake_repo.mark_failed.assert_called_once_with("doc-123", "embedding blew up")
+    fake_repo.mark_indexed.assert_not_called()
+
+
+def test_replace_document_writes_chunks_before_updating_postgres_row(mocker):
+    call_order = []
+    mocker.patch(
+        "regulations_rag.ingestion.ingest_file",
+        side_effect=lambda **kwargs: call_order.append("ingest_file"),
+    )
+    fake_repo = mocker.Mock()
+    fake_repo.get_by_id.return_value = mocker.Mock()
+    fake_repo.update_indexed.side_effect = lambda **kwargs: call_order.append("update_indexed")
+
+    ingestion.replace_document(
+        path=Path("data/raw/ppwr.pdf"),
+        title="PPWR",
+        chunks=[Chunk(page=1, text="one")],
+        file_hash="deadbeef",
+        document_id="doc-123",
+        embedding_config=FAKE_EMBEDDING_CONFIG,
+        qdrant_client=object(),
+        openai_client=object(),
+        documents_repo=fake_repo,
+    )
+
+    assert call_order == ["ingest_file", "update_indexed"]
+    fake_repo.update_indexed.assert_called_once_with(
+        document_id="doc-123",
+        filename="ppwr.pdf",
+        title="PPWR",
+        content_hash="deadbeef",
+        chunk_count=1,
+    )
+
+
+def test_replace_document_leaves_row_untouched_when_ingest_fails(mocker):
+    mocker.patch("regulations_rag.ingestion.ingest_file", side_effect=RuntimeError("boom"))
+    fake_repo = mocker.Mock()
+
+    with pytest.raises(RuntimeError):
+        ingestion.replace_document(
+            path=Path("data/raw/ppwr.pdf"),
+            title="PPWR",
+            chunks=[Chunk(page=1, text="one")],
+            file_hash="deadbeef",
+            document_id="doc-123",
+            embedding_config=FAKE_EMBEDDING_CONFIG,
+            qdrant_client=object(),
+            openai_client=object(),
+            documents_repo=fake_repo,
+        )
+
+    fake_repo.get_by_id.assert_not_called()
+    fake_repo.update_indexed.assert_not_called()
+    fake_repo.create_pending.assert_not_called()
+
+
+def test_replace_document_creates_row_for_legacy_document(mocker):
+    mocker.patch("regulations_rag.ingestion.ingest_file")
+    fake_repo = mocker.Mock()
+    fake_repo.get_by_id.return_value = None
+
+    ingestion.replace_document(
+        path=Path("data/raw/ppwr.pdf"),
+        title="PPWR",
+        chunks=[Chunk(page=1, text="one")],
+        file_hash="deadbeef",
+        document_id="doc-123",
+        embedding_config=FAKE_EMBEDDING_CONFIG,
+        qdrant_client=object(),
+        openai_client=object(),
+        documents_repo=fake_repo,
+    )
+
+    fake_repo.create_pending.assert_called_once_with("doc-123", "ppwr.pdf", "PPWR", "deadbeef")
+    fake_repo.mark_indexed.assert_called_once_with("doc-123", 1)
+    fake_repo.update_indexed.assert_not_called()

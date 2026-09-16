@@ -97,29 +97,6 @@ def find_matches(
     return matches
 
 
-def get_document(client: QdrantClient, document_id: str) -> dict | None:
-    """Return the metadata of one ingested document, identified by document_id."""
-    if not client.collection_exists(QDRANT_COLLECTION):
-        return None
-    points, _ = client.scroll(
-        collection_name=QDRANT_COLLECTION,
-        scroll_filter=Filter(
-            must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
-        ),
-        limit=1,
-        with_payload=True,
-    )
-    if not points:
-        return None
-    payload = points[0].payload or {}
-    return {
-        "document_id": document_id,
-        "title": payload.get("title"),
-        "source_file": payload.get("source_file"),
-        "content_hash": payload.get("content_hash"),
-    }
-
-
 def scroll_document_chunks(
     client: QdrantClient, document_id: str, cursor: str | int | None = None
 ) -> tuple[list[Record], str | int | None]:

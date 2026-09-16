@@ -13,12 +13,15 @@ chunk text).
 - Semantic search + generation grounded strictly in retrieved chunks
 - Every answer includes citations (regulation title, page, chunk text)
 - Skips re-embedding documents already present in Qdrant
+- Tracks the document catalog (id, filename, title, hash, chunk count, status)
+  in Postgres, browsable and sortable on the **Documents** page
 
 ## Tech stack
 
 - [Docling](https://github.com/docling-project/docling) — PDF parsing
 - OpenAI `text-embedding-3-small` — embeddings
 - [Qdrant](https://qdrant.tech/) — vector database (local via Docker)
+- [Postgres](https://www.postgresql.org/) via SQLAlchemy + Alembic — document catalog (local via Docker)
 - OpenAI `gpt-5-nano` — answer generation
 - [Streamlit](https://streamlit.io/) — UI
 
@@ -26,7 +29,7 @@ chunk text).
 
 - Python >= 3.12
 - [uv](https://docs.astral.sh/uv/) for dependency management
-- Docker (to run Qdrant locally)
+- Docker (to run Qdrant and Postgres locally)
 - An OpenAI API key
 
 ## Installation
@@ -47,12 +50,33 @@ Create a `.env` file in the project root:
 ```bash
 OPENAI_API_KEY=sk-...
 QDRANT_URL=http://localhost:6333
+DATABASE_URL=postgresql+psycopg://regulations_rag:regulations_rag@localhost:5432/regulations_rag
 ```
 
-## Running Qdrant
+## Running Qdrant and Postgres
 
 ```bash
-docker run -p 6333:6333 -p 6334:6334 -v "$(pwd)/qdrant_storage:/qdrant/storage" qdrant/qdrant
+docker compose up -d
+```
+
+This starts Qdrant (ports 6333/6334) and Postgres (port 5432) with the
+credentials expected by the `DATABASE_URL` above, each with a persistent
+Docker volume.
+
+## Database schema
+
+Schema changes are managed with Alembic — the app never calls `create_all()`.
+After Postgres is up, apply migrations:
+
+```bash
+uv run alembic upgrade head
+```
+
+When you change the `DocumentModel` in `documents_repository.py`, generate a
+new migration with:
+
+```bash
+uv run alembic revision --autogenerate -m "describe the change"
 ```
 
 ## Usage
@@ -63,21 +87,25 @@ uv run streamlit run src/regulations_rag/app.py
 ```
 
 Open the app in your browser, use the **Ingest** page to load documents into
-Qdrant, then use the **Chat** page to ask questions.
+Qdrant and Postgres, the **Documents** page to browse the catalog, and the
+**Chat** page to ask questions.
 
 ## Project structure
 
 ```
-data/raw/                                source PDFs to ingest
-src/regulations_rag/ingestion.py         business logic: hash check, parse, chunk, embed, upsert in qdrant
-src/regulations_rag/retrieval.py         business logic: semantic search + generation
-src/regulations_rag/vector_store.py      wrapper: Qdrant connection and operations
-src/regulations_rag/app.py               Streamlit entrypoint (multipage nav)
-src/regulations_rag/pages/chat.py        UI: chat, calls retrieval.py, shows answer + citations
-src/regulations_rag/pages/ingest.py      UI: ingestion, calls ingestion.py, shows cost + Confirm button
-evals/                                   evals and golden dataset
-doc/                                     specs
-tests/                                   unit tests
+data/raw/                                    source PDFs to ingest
+alembic/                                     Postgres schema migrations
+src/regulations_rag/ingestion.py             business logic: hash check, parse, chunk, embed, upsert in qdrant/postgres
+src/regulations_rag/retrieval.py             business logic: semantic search + generation
+src/regulations_rag/vector_store.py          wrapper: Qdrant connection and operations
+src/regulations_rag/documents_repository.py  wrapper: Postgres connection and document catalog (only file that knows SQLAlchemy)
+src/regulations_rag/app.py                   Streamlit entrypoint (multipage nav)
+src/regulations_rag/pages/chat.py            UI: chat, calls retrieval.py, shows answer + citations
+src/regulations_rag/pages/ingest.py          UI: ingestion, calls ingestion.py, shows cost + Confirm button
+src/regulations_rag/pages/documents.py       UI: paginated, sortable document catalog, calls documents_repository.py
+evals/                                       evals and golden dataset
+doc/                                         specs
+tests/                                       unit tests
 ```
 
 ## Development

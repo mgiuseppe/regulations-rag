@@ -1,6 +1,7 @@
 import streamlit as st
 
 from regulations_rag import vector_store
+from regulations_rag.documents_repository import DocumentsRepository
 
 document_id = st.query_params.get("document_id")
 
@@ -9,10 +10,8 @@ if not document_id:
     st.page_link("pages/documents.py", label="Back to documents", icon=":material/arrow_back:")
     st.stop()
 
-qdrant_client = vector_store.get_client()
-vector_store.ensure_collection(qdrant_client)
-
-document = vector_store.get_document(qdrant_client, document_id)
+documents_repo = DocumentsRepository()
+document = documents_repo.get_by_id(document_id)
 
 if document is None:
     st.error("Document not found.")
@@ -20,9 +19,15 @@ if document is None:
     st.stop()
 
 st.page_link("pages/documents.py", label="Back to documents", icon=":material/arrow_back:")
-st.title(document["title"])
-st.write(f"**Source file:** {document['source_file']}")
-st.caption(f"Document ID: {document['document_id']}")
+st.title(document.title)
+st.write(f"**File name:** {document.filename}")
+st.caption(f"Document ID: {document.id}")
+st.write(f"**Status:** {document.status}")
+if document.error_message:
+    st.error(document.error_message)
+
+qdrant_client = vector_store.get_client()
+vector_store.ensure_collection(qdrant_client)
 
 if st.session_state.get("chunks_document_id") != document_id:
     st.session_state.chunks_document_id = document_id
@@ -36,7 +41,7 @@ if not st.session_state.chunks and not st.session_state.chunks_exhausted:
     st.session_state.chunks_cursor = next_cursor
     st.session_state.chunks_exhausted = next_cursor is None
 
-st.subheader(f"Chunks ({len(st.session_state.chunks)})")
+st.subheader(f"Chunks ({len(st.session_state.chunks)} of {document.chunk_count})")
 
 for point in st.session_state.chunks:
     payload = point.payload or {}

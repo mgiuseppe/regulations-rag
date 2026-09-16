@@ -152,44 +152,6 @@ def test_delete_points_skips_call_when_no_ids(mocker):
     fake_client.delete.assert_not_called()
 
 
-def test_get_document_returns_metadata_for_matching_document():
-    points = [
-        make_point(
-            {
-                "document_id": "doc-1",
-                "title": "PPWR",
-                "source_file": "ppwr.pdf",
-                "content_hash": "abc",
-            }
-        )
-    ]
-    client = make_client(points)
-
-    document = vector_store.get_document(client, "doc-1")
-
-    assert document == {
-        "document_id": "doc-1",
-        "title": "PPWR",
-        "source_file": "ppwr.pdf",
-        "content_hash": "abc",
-    }
-
-
-def test_get_document_returns_none_when_not_found():
-    client = SimpleNamespace(
-        collection_exists=lambda name: True,
-        scroll=lambda **kwargs: ([], None),
-    )
-
-    assert vector_store.get_document(client, "missing") is None
-
-
-def test_get_document_returns_none_when_collection_missing():
-    client = SimpleNamespace(collection_exists=lambda name: False)
-
-    assert vector_store.get_document(client, "doc-1") is None
-
-
 def test_scroll_document_chunks_filters_by_document_id_and_returns_cursor():
     points = [make_point({"text": "chunk text"})]
     scroll_calls = []
