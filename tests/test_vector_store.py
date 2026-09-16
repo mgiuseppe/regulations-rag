@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from regulations_rag.repositories.vector_store import VectorStore
+from regulations_rag.repositories.vector_store import ChunkRecord, DocumentMatch, DocumentSummary, VectorStore
 
 
 def make_client(points):
@@ -58,13 +58,13 @@ def test_list_documents_dedupes_by_document_id():
     documents = store.list_documents()
 
     assert documents == [
-        {
-            "key_field": "document_id",
-            "key": "doc-1",
-            "title": "PPWR",
-            "source_file": "ppwr.pdf",
-            "content_hash": "abc",
-        }
+        DocumentSummary(
+            key_field="document_id",
+            key="doc-1",
+            title="PPWR",
+            source_file="ppwr.pdf",
+            content_hash="abc",
+        )
     ]
 
 
@@ -75,13 +75,13 @@ def test_list_documents_falls_back_to_source_file_when_no_document_id():
     documents = store.list_documents()
 
     assert documents == [
-        {
-            "key_field": "source_file",
-            "key": "reach.pdf",
-            "title": "REACH",
-            "source_file": "reach.pdf",
-            "content_hash": "cafe",
-        }
+        DocumentSummary(
+            key_field="source_file",
+            key="reach.pdf",
+            title="REACH",
+            source_file="reach.pdf",
+            content_hash="cafe",
+        )
     ]
 
 
@@ -100,21 +100,21 @@ def test_find_matches_by_hash_filename_and_title():
 
     exact_hash = store.find_matches("abc", "different.pdf", "Different Title")
     assert exact_hash == [
-        {
-            "key_field": "document_id",
-            "key": "doc-1",
-            "title": "PPWR",
-            "source_file": "ppwr.pdf",
-            "content_hash": "abc",
-            "matched_on": ["hash"],
-        }
+        DocumentMatch(
+            key_field="document_id",
+            key="doc-1",
+            title="PPWR",
+            source_file="ppwr.pdf",
+            content_hash="abc",
+            matched_on=["hash"],
+        )
     ]
 
     filename_match = store.find_matches("xyz", "ppwr.pdf", "Different Title")
-    assert filename_match[0]["matched_on"] == ["filename"]
+    assert filename_match[0].matched_on == ["filename"]
 
     title_match = store.find_matches("xyz", "different.pdf", "ppwr")
-    assert title_match[0]["matched_on"] == ["title"]
+    assert title_match[0].matched_on == ["title"]
 
 
 def test_find_matches_returns_empty_when_nothing_matches():
@@ -185,6 +185,8 @@ def test_get_document_chunks_filters_by_document_id_and_sorts_by_page():
         make_point({"page": 1, "chunk_number": 1}),
         make_point({"page": 2, "chunk_number": 2}),
     ]
+    for i, point in enumerate(points):
+        point.id = f"p{i}"
     scroll_calls = []
 
     def scroll(**kwargs):
@@ -194,11 +196,11 @@ def test_get_document_chunks_filters_by_document_id_and_sorts_by_page():
     client = SimpleNamespace(collection_exists=lambda name: True, scroll=scroll)
     store = VectorStore(client)
 
-    result_points = store.get_document_chunks("doc-1")
+    result_chunks = store.get_document_chunks("doc-1")
 
-    assert [p.payload["page"] for p in result_points] == [1, 1, 2, 3]
+    assert [c.page for c in result_chunks] == [1, 1, 2, 3]
     # ties on page keep their original relative order (stable sort)
-    assert [p.payload["chunk_number"] for p in result_points] == [0, 1, 2, 4]
+    assert [c.chunk_number for c in result_chunks] == [0, 1, 2, 4]
     filter_condition = scroll_calls[0]["scroll_filter"].must[0]
     assert filter_condition.key == "document_id"
     assert filter_condition.match.value == "doc-1"
@@ -208,6 +210,8 @@ def test_get_document_chunks_filters_by_document_id_and_sorts_by_page():
 def test_get_document_chunks_pages_through_results():
     first_page = [make_point({"page": 1})]
     second_page = [make_point({"page": 2})]
+    for point in first_page + second_page:
+        point.id = "p1"
     responses = [(first_page, "cursor-1"), (second_page, None)]
 
     def scroll(**kwargs):
@@ -216,9 +220,9 @@ def test_get_document_chunks_pages_through_results():
     client = SimpleNamespace(collection_exists=lambda name: True, scroll=scroll)
     store = VectorStore(client)
 
-    result_points = store.get_document_chunks("doc-1")
+    result_chunks = store.get_document_chunks("doc-1")
 
-    assert result_points == first_page + second_page
+    assert [c.page for c in result_chunks] == [1, 2]
 
 
 def test_get_document_chunks_returns_empty_when_collection_missing():

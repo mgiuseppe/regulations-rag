@@ -62,12 +62,12 @@ for path in files:
     st.session_state.ingest_titles[path.name] = title
 
     matches = vector_store.find_matches(file_hash, path.name, title)
-    exact_match = next((m for m in matches if "hash" in m["matched_on"]), None)
+    exact_match = next((m for m in matches if "hash" in m.matched_on), None)
 
     if exact_match:
         st.success(
             f"Already up to date — matches existing document "
-            f"'{exact_match['title']}' ({exact_match['source_file']})"
+            f"'{exact_match.title}' ({exact_match.source_file})"
         )
         continue
 
@@ -79,11 +79,11 @@ for path in files:
         st.warning("This file looks like it might already be in the library:")
         for match in matches:
             st.write(
-                f"- **{match['title']}** ({match['source_file']}) — "
-                f"matched on: {', '.join(match['matched_on'])}"
+                f"- **{match.title}** ({match.source_file}) — "
+                f"matched on: {', '.join(match.matched_on)}"
             )
         options = ["Undo (skip this file)", "Add as a new file"] + [
-            f"Replace the file: {match['title']} ({match['source_file']})" for match in matches
+            f"Replace the file: {match.title} ({match.source_file})" for match in matches
         ]
         choice = st.radio(
             "What do you want to do?", options, key=f"action_{path.name}"
@@ -99,7 +99,7 @@ for path in files:
             # after the new points are inserted could also catch the new
             # points if they share the same source_file.
             replace_point_ids = vector_store.get_document_point_ids(
-                replace_target["key_field"], replace_target["key"]
+                replace_target.key_field, replace_target.key
             )
     else:
         st.write("New file — will be ingested")
@@ -113,8 +113,8 @@ for path in files:
     st.write(f"{tokens:,} tokens (~${cost:.4f})")
 
     replace_document_id = (
-        replace_target["key"]
-        if replace_target and replace_target["key_field"] == "document_id"
+        replace_target.key
+        if replace_target and replace_target.key_field == "document_id"
         else None
     )
 

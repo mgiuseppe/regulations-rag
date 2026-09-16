@@ -41,16 +41,16 @@ def embed_query(question: str, openai_client: OpenAI, model_name: str = DEFAULT_
 def search(
     vector_store: VectorStore, query_vector: list[float], top_n: int
 ) -> list[RetrievedChunk]:
-    points = vector_store.search(query_vector, top_n)
+    results = vector_store.search(query_vector, top_n)
     return [
         RetrievedChunk(
-            title=point.payload["title"],
-            source_file=point.payload["source_file"],
-            page=point.payload["page"],
-            text=point.payload["text"],
-            score=point.score,
+            title=result.title,
+            source_file=result.source_file,
+            page=result.page,
+            text=result.text,
+            score=result.score,
         )
-        for point in points
+        for result in results
     ]
 
 

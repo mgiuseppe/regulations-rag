@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from regulations_rag import retrieval
+from regulations_rag.repositories.vector_store import SearchResult
 from regulations_rag.retrieval import Message, RetrievedChunk
 
 
@@ -43,12 +44,9 @@ def test_build_messages_includes_prior_history():
 
 
 def test_search_maps_scored_points_to_retrieved_chunks(mocker):
-    fake_point = SimpleNamespace(
-        payload={"title": "PPWR", "source_file": "ppwr.pdf", "page": 3, "text": "hello"},
-        score=0.87,
-    )
+    fake_result = SearchResult(title="PPWR", source_file="ppwr.pdf", page=3, text="hello", score=0.87)
     fake_vector_store = mocker.Mock()
-    fake_vector_store.search.return_value = [fake_point]
+    fake_vector_store.search.return_value = [fake_result]
 
     chunks = retrieval.search(vector_store=fake_vector_store, query_vector=[0.1], top_n=5)
 
