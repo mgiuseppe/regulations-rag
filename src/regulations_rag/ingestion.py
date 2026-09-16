@@ -155,9 +155,10 @@ def ingest_file(
                 "content_hash": file_hash,
                 "page": chunk.page,
                 "text": chunk.text,
+                "chunk_number": chunk_number,
             },
         )
-        for chunk, vector in zip(chunks, vectors)
+        for chunk_number, (chunk, vector) in enumerate(zip(chunks, vectors))
     ]
     vector_store.upsert_points(qdrant_client, points)
 

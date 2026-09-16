@@ -4,8 +4,10 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     MatchValue,
+    PayloadSchemaType,
     PointIdsList,
     PointStruct,
+    Record,
     ScoredPoint,
     VectorParams,
 )
@@ -25,6 +27,11 @@ def ensure_collection(client: QdrantClient) -> None:
             collection_name=QDRANT_COLLECTION,
             vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
         )
+    client.create_payload_index(
+        collection_name=QDRANT_COLLECTION,
+        field_name="document_id",
+        field_schema=PayloadSchemaType.KEYWORD,
+    )
 
 
 def _iter_all_points(client: QdrantClient):
@@ -87,6 +94,34 @@ def find_matches(
         if matched_on:
             matches.append({**document, "matched_on": matched_on})
     return matches
+
+
+def get_document_chunks(client: QdrantClient, document_id: str) -> list[Record]:
+    """Return every chunk of a document, ordered by page.
+
+    Qdrant's `order_by` cannot be combined with cursor-based pagination
+    (`next_page_offset` is always null once `order_by` is set), so instead
+    we page through with the regular ID-based cursor and sort client-side.
+    """
+    if not client.collection_exists(QDRANT_COLLECTION):
+        return []
+    points: list[Record] = []
+    offset = None
+    while True:
+        page, offset = client.scroll(
+            collection_name=QDRANT_COLLECTION,
+            scroll_filter=Filter(
+                must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+            ),
+            limit=SCROLL_PAGE_SIZE,
+            with_payload=True,
+            offset=offset,
+        )
+        points.extend(page)
+        if offset is None:
+            break
+    points.sort(key=lambda point: (point.payload or {}).get("page", 0))
+    return points
 
 
 def get_document_point_ids(client: QdrantClient, key_field: str, key: str) -> list[str]:

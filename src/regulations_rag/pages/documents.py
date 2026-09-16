@@ -46,19 +46,22 @@ st.session_state.documents_page = page
 
 st.write(f"{total} document(s) — page {page} of {total_pages}")
 
-st.table(
-    [
-        {
-            "Document ID": doc.id,
-            "File name": doc.filename,
-            "Title": doc.title,
-            "Hash": doc.content_hash,
-            "Chunks": doc.chunk_count,
-            "Status": doc.status,
-        }
-        for doc in documents
-    ]
-)
+header = st.columns([3, 3, 1, 1, 1])
+for col, label in zip(header, ["Title", "File name", "Chunks", "Status", ""]):
+    col.write(f"**{label}**")
+
+for doc in documents:
+    row = st.columns([3, 3, 1, 1, 1])
+    row[0].write(doc.title)
+    row[1].write(doc.filename)
+    row[2].write(doc.chunk_count)
+    row[3].write(doc.status)
+    row[4].page_link(
+        "pages/document_detail.py",
+        label="View",
+        icon=":material/chevron_right:",
+        query_params={"document_id": doc.id},
+    )
 
 nav_prev, nav_info, nav_next = st.columns([1, 2, 1])
 with nav_prev:

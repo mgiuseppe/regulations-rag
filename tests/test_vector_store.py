@@ -14,6 +14,24 @@ def make_point(payload):
     return SimpleNamespace(payload=payload)
 
 
+def test_ensure_collection_creates_document_id_index():
+    index_calls = []
+    client = SimpleNamespace(
+        collection_exists=lambda name: True,
+        create_payload_index=lambda **kwargs: index_calls.append(kwargs),
+    )
+
+    vector_store.ensure_collection(client)
+
+    assert index_calls == [
+        {
+            "collection_name": vector_store.QDRANT_COLLECTION,
+            "field_name": "document_id",
+            "field_schema": vector_store.PayloadSchemaType.KEYWORD,
+        }
+    ]
+
+
 def test_list_documents_dedupes_by_document_id():
     points = [
         make_point(
@@ -150,3 +168,50 @@ def test_delete_points_skips_call_when_no_ids(mocker):
     vector_store.delete_points(fake_client, [])
 
     fake_client.delete.assert_not_called()
+
+
+def test_get_document_chunks_filters_by_document_id_and_sorts_by_page():
+    points = [
+        make_point({"page": 3, "chunk_number": 4}),
+        make_point({"page": 1, "chunk_number": 0}),
+        make_point({"page": 1, "chunk_number": 1}),
+        make_point({"page": 2, "chunk_number": 2}),
+    ]
+    scroll_calls = []
+
+    def scroll(**kwargs):
+        scroll_calls.append(kwargs)
+        return points, None
+
+    client = SimpleNamespace(collection_exists=lambda name: True, scroll=scroll)
+
+    result_points = vector_store.get_document_chunks(client, "doc-1")
+
+    assert [p.payload["page"] for p in result_points] == [1, 1, 2, 3]
+    # ties on page keep their original relative order (stable sort)
+    assert [p.payload["chunk_number"] for p in result_points] == [0, 1, 2, 4]
+    filter_condition = scroll_calls[0]["scroll_filter"].must[0]
+    assert filter_condition.key == "document_id"
+    assert filter_condition.match.value == "doc-1"
+    assert "order_by" not in scroll_calls[0]
+
+
+def test_get_document_chunks_pages_through_results():
+    first_page = [make_point({"page": 1})]
+    second_page = [make_point({"page": 2})]
+    responses = [(first_page, "cursor-1"), (second_page, None)]
+
+    def scroll(**kwargs):
+        return responses.pop(0)
+
+    client = SimpleNamespace(collection_exists=lambda name: True, scroll=scroll)
+
+    result_points = vector_store.get_document_chunks(client, "doc-1")
+
+    assert result_points == first_page + second_page
+
+
+def test_get_document_chunks_returns_empty_when_collection_missing():
+    client = SimpleNamespace(collection_exists=lambda name: False)
+
+    assert vector_store.get_document_chunks(client, "doc-1") == []
