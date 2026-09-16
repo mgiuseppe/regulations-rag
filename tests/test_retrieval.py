@@ -47,9 +47,10 @@ def test_search_maps_scored_points_to_retrieved_chunks(mocker):
         payload={"title": "PPWR", "source_file": "ppwr.pdf", "page": 3, "text": "hello"},
         score=0.87,
     )
-    mocker.patch("regulations_rag.retrieval.vector_store.search", return_value=[fake_point])
+    fake_vector_store = mocker.Mock()
+    fake_vector_store.search.return_value = [fake_point]
 
-    chunks = retrieval.search(qdrant_client=None, query_vector=[0.1], top_n=5)
+    chunks = retrieval.search(vector_store=fake_vector_store, query_vector=[0.1], top_n=5)
 
     assert chunks == [
         RetrievedChunk(title="PPWR", source_file="ppwr.pdf", page=3, text="hello", score=0.87)
