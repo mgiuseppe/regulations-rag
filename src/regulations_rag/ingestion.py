@@ -14,8 +14,8 @@ from openai import OpenAI
 from qdrant_client.models import PointStruct
 
 from regulations_rag.config import EmbeddingModelConfig
-from regulations_rag.repositories import vector_store
 from regulations_rag.repositories.documents_repository import DocumentRecord, DocumentsRepository
+from regulations_rag.repositories.vector_store import VectorStore
 
 RAW_DATA_DIR = Path("data/raw")
 
@@ -138,7 +138,7 @@ def ingest_file(
     file_hash: str,
     document_id: str,
     embedding_config: EmbeddingModelConfig,
-    qdrant_client,
+    vector_store: VectorStore,
     openai_client: OpenAI,
 ) -> None:
     source_file = path.name
@@ -160,7 +160,7 @@ def ingest_file(
         )
         for chunk_number, (chunk, vector) in enumerate(zip(chunks, vectors))
     ]
-    vector_store.upsert_points(qdrant_client, points)
+    vector_store.upsert_points(points)
 
 
 def ingest_new_document(
@@ -170,7 +170,7 @@ def ingest_new_document(
     file_hash: str,
     document_id: str,
     embedding_config: EmbeddingModelConfig,
-    qdrant_client,
+    vector_store: VectorStore,
     openai_client: OpenAI,
     documents_repo: DocumentsRepository,
 ) -> DocumentRecord:
@@ -186,7 +186,7 @@ def ingest_new_document(
             file_hash=file_hash,
             document_id=document_id,
             embedding_config=embedding_config,
-            qdrant_client=qdrant_client,
+            vector_store=vector_store,
             openai_client=openai_client,
         )
     except Exception as exc:
@@ -202,7 +202,7 @@ def replace_document(
     file_hash: str,
     document_id: str,
     embedding_config: EmbeddingModelConfig,
-    qdrant_client,
+    vector_store: VectorStore,
     openai_client: OpenAI,
     documents_repo: DocumentsRepository,
 ) -> DocumentRecord:
@@ -222,7 +222,7 @@ def replace_document(
         file_hash=file_hash,
         document_id=document_id,
         embedding_config=embedding_config,
-        qdrant_client=qdrant_client,
+        vector_store=vector_store,
         openai_client=openai_client,
     )
     if documents_repo.get_by_id(document_id) is None:

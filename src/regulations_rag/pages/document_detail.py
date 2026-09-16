@@ -1,7 +1,7 @@
 import streamlit as st
 
-from regulations_rag.repositories import vector_store
 from regulations_rag.repositories.documents_repository import DocumentsRepository
+from regulations_rag.repositories.vector_store import VectorStore
 
 document_id = st.query_params.get("document_id")
 
@@ -27,11 +27,11 @@ st.write(f"**Status:** {document.status}")
 if document.error_message:
     st.error(document.error_message)
 
-qdrant_client = vector_store.get_client()
-vector_store.ensure_collection(qdrant_client)
+vector_store = VectorStore()
+vector_store.ensure_collection()
 
 with st.spinner("Loading chunks..."):
-    chunks = vector_store.get_document_chunks(qdrant_client, document_id)
+    chunks = vector_store.get_document_chunks(document_id)
 
 st.subheader(f"Chunks ({len(chunks)})")
 

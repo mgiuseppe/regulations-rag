@@ -2,10 +2,9 @@ from dataclasses import dataclass
 from typing import Iterator, Literal
 
 from openai import OpenAI
-from qdrant_client import QdrantClient
 
 from regulations_rag.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_MODELS, GENERATION_MODEL
-from regulations_rag.repositories import vector_store
+from regulations_rag.repositories.vector_store import VectorStore
 
 SYSTEM_PROMPT = (
     "You are a regulatory assistant. Answer the user's question using ONLY the "
@@ -40,9 +39,9 @@ def embed_query(question: str, openai_client: OpenAI, model_name: str = DEFAULT_
 
 
 def search(
-    qdrant_client: QdrantClient, query_vector: list[float], top_n: int
+    vector_store: VectorStore, query_vector: list[float], top_n: int
 ) -> list[RetrievedChunk]:
-    points = vector_store.search(qdrant_client, query_vector, top_n)
+    points = vector_store.search(query_vector, top_n)
     return [
         RetrievedChunk(
             title=point.payload["title"],

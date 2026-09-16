@@ -3,7 +3,7 @@ from openai import OpenAI
 
 from regulations_rag import retrieval
 from regulations_rag.config import TOP_N_CHUNKS
-from regulations_rag.repositories import vector_store
+from regulations_rag.repositories.vector_store import VectorStore
 from regulations_rag.retrieval import Message
 
 st.title("Chat")
@@ -30,10 +30,10 @@ if question:
     render_message(st.session_state.messages[-1])
 
     openai_client = OpenAI()
-    qdrant_client = vector_store.get_client()
+    vector_store = VectorStore()
 
     query_vector = retrieval.embed_query(question, openai_client)
-    chunks = retrieval.search(qdrant_client, query_vector, TOP_N_CHUNKS)
+    chunks = retrieval.search(vector_store, query_vector, TOP_N_CHUNKS)
 
     history = [
         Message(role=m["role"], content=m["content"])

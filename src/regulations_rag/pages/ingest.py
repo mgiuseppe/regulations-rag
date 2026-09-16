@@ -5,8 +5,8 @@ from openai import OpenAI
 
 from regulations_rag import ingestion
 from regulations_rag.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_MODELS
-from regulations_rag.repositories import vector_store
 from regulations_rag.repositories.documents_repository import DocumentsRepository
+from regulations_rag.repositories.vector_store import VectorStore
 
 st.title("Ingest regulations")
 
@@ -19,8 +19,8 @@ def _parse_and_chunk_cached(path_str: str, file_hash: str, model_name: str):
     from pathlib import Path
     return ingestion.parse_and_chunk(Path(path_str), EMBEDDING_MODELS[model_name])
 
-qdrant_client = vector_store.get_client()
-vector_store.ensure_collection(qdrant_client)
+vector_store = VectorStore()
+vector_store.ensure_collection()
 
 if "uploaded_paths" not in st.session_state:
     st.session_state.uploaded_paths = []
@@ -61,7 +61,7 @@ for path in files:
     title = st.text_input("Title", value=default_title, key=f"title_{path.name}")
     st.session_state.ingest_titles[path.name] = title
 
-    matches = vector_store.find_matches(qdrant_client, file_hash, path.name, title)
+    matches = vector_store.find_matches(file_hash, path.name, title)
     exact_match = next((m for m in matches if "hash" in m["matched_on"]), None)
 
     if exact_match:
@@ -99,7 +99,7 @@ for path in files:
             # after the new points are inserted could also catch the new
             # points if they share the same source_file.
             replace_point_ids = vector_store.get_document_point_ids(
-                qdrant_client, replace_target["key_field"], replace_target["key"]
+                replace_target["key_field"], replace_target["key"]
             )
     else:
         st.write("New file — will be ingested")
@@ -153,7 +153,7 @@ if to_process:
                             file_hash=item["file_hash"],
                             document_id=document_id,
                             embedding_config=embedding_config,
-                            qdrant_client=qdrant_client,
+                            vector_store=vector_store,
                             openai_client=openai_client,
                             documents_repo=documents_repo,
                         )
@@ -161,7 +161,7 @@ if to_process:
                         # Qdrant has no transactions, so this avoids a window
                         # where the document is missing entirely if something
                         # fails mid-way.
-                        vector_store.delete_points(qdrant_client, item["replace_point_ids"])
+                        vector_store.delete_points(item["replace_point_ids"])
                     else:
                         document_id = str(uuid.uuid4())
                         ingestion.ingest_new_document(
@@ -171,7 +171,7 @@ if to_process:
                             file_hash=item["file_hash"],
                             document_id=document_id,
                             embedding_config=embedding_config,
-                            qdrant_client=qdrant_client,
+                            vector_store=vector_store,
                             openai_client=openai_client,
                             documents_repo=documents_repo,
                         )

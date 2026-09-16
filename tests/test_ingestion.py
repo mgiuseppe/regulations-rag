@@ -72,14 +72,13 @@ def test_embed_chunks_empty_list_skips_api_call():
 
 
 def test_ingest_file_upserts_points_with_document_id(mocker):
-    mock_upsert = mocker.patch("regulations_rag.repositories.vector_store.upsert_points")
+    fake_vector_store = mocker.Mock()
     mocker.patch(
         "regulations_rag.ingestion.embed_chunks",
         return_value=[[0.1, 0.2], [0.3, 0.4]],
     )
 
     chunks = [Chunk(page=1, text="one"), Chunk(page=2, text="two")]
-    fake_qdrant_client = object()
     fake_openai_client = object()
 
     ingestion.ingest_file(
@@ -89,13 +88,13 @@ def test_ingest_file_upserts_points_with_document_id(mocker):
         file_hash="deadbeef",
         document_id="doc-123",
         embedding_config=FAKE_EMBEDDING_CONFIG,
-        qdrant_client=fake_qdrant_client,
+        vector_store=fake_vector_store,
         openai_client=fake_openai_client,
     )
 
-    mock_upsert.assert_called_once()
+    fake_vector_store.upsert_points.assert_called_once()
 
-    points = mock_upsert.call_args.args[1]
+    points = fake_vector_store.upsert_points.call_args.args[0]
     assert len(points) == 2
     assert points[0].payload == {
         "document_id": "doc-123",
@@ -121,7 +120,7 @@ def test_ingest_new_document_marks_indexed_on_success(mocker):
         file_hash="deadbeef",
         document_id="doc-123",
         embedding_config=FAKE_EMBEDDING_CONFIG,
-        qdrant_client=object(),
+        vector_store=object(),
         openai_client=object(),
         documents_repo=fake_repo,
     )
@@ -145,7 +144,7 @@ def test_ingest_new_document_marks_failed_on_exception(mocker):
             file_hash="deadbeef",
             document_id="doc-123",
             embedding_config=FAKE_EMBEDDING_CONFIG,
-            qdrant_client=object(),
+            vector_store=object(),
             openai_client=object(),
             documents_repo=fake_repo,
         )
@@ -172,7 +171,7 @@ def test_replace_document_writes_chunks_before_updating_postgres_row(mocker):
         file_hash="deadbeef",
         document_id="doc-123",
         embedding_config=FAKE_EMBEDDING_CONFIG,
-        qdrant_client=object(),
+        vector_store=object(),
         openai_client=object(),
         documents_repo=fake_repo,
     )
@@ -199,7 +198,7 @@ def test_replace_document_leaves_row_untouched_when_ingest_fails(mocker):
             file_hash="deadbeef",
             document_id="doc-123",
             embedding_config=FAKE_EMBEDDING_CONFIG,
-            qdrant_client=object(),
+            vector_store=object(),
             openai_client=object(),
             documents_repo=fake_repo,
         )
@@ -221,7 +220,7 @@ def test_replace_document_creates_row_for_legacy_document(mocker):
         file_hash="deadbeef",
         document_id="doc-123",
         embedding_config=FAKE_EMBEDDING_CONFIG,
-        qdrant_client=object(),
+        vector_store=object(),
         openai_client=object(),
         documents_repo=fake_repo,
     )
