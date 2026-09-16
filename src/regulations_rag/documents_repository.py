@@ -7,6 +7,7 @@ objects with `DocumentsRepository`.
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import cache
 
 from sqlalchemy import DateTime, Integer, String, create_engine, func, select
 from sqlalchemy.engine import Engine
@@ -67,14 +68,9 @@ def _to_record(model: DocumentModel) -> DocumentRecord:
     )
 
 
-_engine: Engine | None = None
-
-
+@cache
 def _get_engine() -> Engine:
-    global _engine
-    if _engine is None:
-        _engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-    return _engine
+    return create_engine(DATABASE_URL, pool_pre_ping=True)
 
 
 class DocumentsRepository:
