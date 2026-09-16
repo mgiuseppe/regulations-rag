@@ -22,6 +22,7 @@ st.page_link("pages/documents.py", label="Back to documents", icon=":material/ar
 st.title(document.title)
 st.write(f"**File name:** {document.filename}")
 st.caption(f"Document ID: {document.id}")
+st.caption(f"Hash: {document.content_hash}")
 st.write(f"**Status:** {document.status}")
 if document.error_message:
     st.error(document.error_message)
@@ -29,34 +30,13 @@ if document.error_message:
 qdrant_client = vector_store.get_client()
 vector_store.ensure_collection(qdrant_client)
 
-if st.session_state.get("chunks_document_id") != document_id:
-    st.session_state.chunks_document_id = document_id
-    st.session_state.chunks = []
-    st.session_state.chunks_cursor = None
-    st.session_state.chunks_exhausted = False
+with st.spinner("Loading chunks..."):
+    chunks = vector_store.get_document_chunks(qdrant_client, document_id)
 
-if not st.session_state.chunks and not st.session_state.chunks_exhausted:
-    points, next_cursor = vector_store.scroll_document_chunks(qdrant_client, document_id)
-    st.session_state.chunks.extend(points)
-    st.session_state.chunks_cursor = next_cursor
-    st.session_state.chunks_exhausted = next_cursor is None
+st.subheader(f"Chunks ({len(chunks)})")
 
-st.subheader(f"Chunks ({len(st.session_state.chunks)} of {document.chunk_count})")
-
-for point in st.session_state.chunks:
+for point in chunks:
     payload = point.payload or {}
     with st.expander(f"Chunk {payload.get('chunk_number')} — page {payload.get('page')}"):
         st.caption(f"Chunk ID: {point.id}")
         st.write(payload.get("text"))
-
-if not st.session_state.chunks_exhausted:
-    if st.button("Load more"):
-        points, next_cursor = vector_store.scroll_document_chunks(
-            qdrant_client, document_id, cursor=st.session_state.chunks_cursor
-        )
-        st.session_state.chunks.extend(points)
-        st.session_state.chunks_cursor = next_cursor
-        st.session_state.chunks_exhausted = next_cursor is None
-        st.rerun()
-else:
-    st.caption("All chunks loaded.")

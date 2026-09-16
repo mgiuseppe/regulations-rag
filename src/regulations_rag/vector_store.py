@@ -15,7 +15,6 @@ from qdrant_client.models import (
 from regulations_rag.config import QDRANT_COLLECTION, QDRANT_HOST, QDRANT_PORT, VECTOR_SIZE
 
 SCROLL_PAGE_SIZE = 256
-CHUNKS_PAGE_SIZE = 20
 
 
 def get_client() -> QdrantClient:
@@ -97,24 +96,32 @@ def find_matches(
     return matches
 
 
-def scroll_document_chunks(
-    client: QdrantClient, document_id: str, cursor: str | int | None = None
-) -> tuple[list[Record], str | int | None]:
-    """Return one page of chunks for a document, plus a cursor for the next page
-    (None once there are no more chunks).
+def get_document_chunks(client: QdrantClient, document_id: str) -> list[Record]:
+    """Return every chunk of a document, ordered by page.
+
+    Qdrant's `order_by` cannot be combined with cursor-based pagination
+    (`next_page_offset` is always null once `order_by` is set), so instead
+    we page through with the regular ID-based cursor and sort client-side.
     """
     if not client.collection_exists(QDRANT_COLLECTION):
-        return [], None
-    points, next_cursor = client.scroll(
-        collection_name=QDRANT_COLLECTION,
-        scroll_filter=Filter(
-            must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
-        ),
-        limit=CHUNKS_PAGE_SIZE,
-        with_payload=True,
-        offset=cursor,
-    )
-    return points, next_cursor
+        return []
+    points: list[Record] = []
+    offset = None
+    while True:
+        page, offset = client.scroll(
+            collection_name=QDRANT_COLLECTION,
+            scroll_filter=Filter(
+                must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+            ),
+            limit=SCROLL_PAGE_SIZE,
+            with_payload=True,
+            offset=offset,
+        )
+        points.extend(page)
+        if offset is None:
+            break
+    points.sort(key=lambda point: (point.payload or {}).get("page", 0))
+    return points
 
 
 def get_document_point_ids(client: QdrantClient, key_field: str, key: str) -> list[str]:

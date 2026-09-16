@@ -46,18 +46,17 @@ st.session_state.documents_page = page
 
 st.write(f"{total} document(s) — page {page} of {total_pages}")
 
-header = st.columns([3, 3, 2, 1, 1, 1])
-for col, label in zip(header, ["Title", "File name", "Hash", "Chunks", "Status", ""]):
+header = st.columns([3, 3, 1, 1, 1])
+for col, label in zip(header, ["Title", "File name", "Chunks", "Status", ""]):
     col.write(f"**{label}**")
 
 for doc in documents:
-    row = st.columns([3, 3, 2, 1, 1, 1])
+    row = st.columns([3, 3, 1, 1, 1])
     row[0].write(doc.title)
     row[1].write(doc.filename)
-    row[2].write(doc.content_hash[:12] + "…")
-    row[3].write(doc.chunk_count)
-    row[4].write(doc.status)
-    row[5].page_link(
+    row[2].write(doc.chunk_count)
+    row[3].write(doc.status)
+    row[4].page_link(
         "pages/document_detail.py",
         label="View",
         icon=":material/chevron_right:",
