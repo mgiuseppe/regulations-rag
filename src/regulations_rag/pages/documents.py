@@ -32,9 +32,10 @@ if st.session_state.get("documents_sort_key") != sort_key:
 
 page = st.session_state.get("documents_page", 1)
 
-documents, total = documents_repo.list_documents(
-    page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order
-)
+with st.spinner("Loading documents..."):
+    documents, total = documents_repo.list_documents(
+        page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order
+    )
 
 if total == 0:
     st.info("No documents ingested yet.")
@@ -46,22 +47,21 @@ st.session_state.documents_page = page
 
 st.write(f"{total} document(s) — page {page} of {total_pages}")
 
-header = st.columns([3, 3, 1, 1, 1])
-for col, label in zip(header, ["Title", "File name", "Chunks", "Status", ""]):
+header = st.columns([3, 3, 1, 1])
+for col, label in zip(header, ["Title", "File name", "Chunks", "Status"]):
     col.write(f"**{label}**")
 
 for doc in documents:
-    row = st.columns([3, 3, 1, 1, 1])
-    row[0].write(doc.title)
-    row[1].write(doc.filename)
-    row[2].write(doc.chunk_count)
-    row[3].write(doc.status)
-    row[4].page_link(
+    row = st.columns([3, 3, 1, 1])
+    row[0].page_link(
         "pages/document_detail.py",
-        label="View",
+        label=doc.title,
         icon=":material/chevron_right:",
         query_params={"document_id": doc.id},
     )
+    row[1].write(doc.filename)
+    row[2].write(doc.chunk_count)
+    row[3].write(doc.status)
 
 nav_prev, nav_info, nav_next = st.columns([1, 2, 1])
 with nav_prev:
