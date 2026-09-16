@@ -52,11 +52,10 @@ render_start = time.perf_counter()
 
 st.subheader(f"Chunks ({len(chunks)})")
 
-for point in chunks:
-    payload = point.payload or {}
-    with st.expander(f"Chunk {payload.get('chunk_number')} — page {payload.get('page')}"):
-        st.caption(f"Chunk ID: {point.id}")
-        st.write(payload.get("text"))
+for chunk in chunks:
+    with st.expander(f"Chunk {chunk.chunk_number} — page {chunk.page}"):
+        st.caption(f"Chunk ID: {chunk.id}")
+        st.write(chunk.text)
 
 logger.info(
     "document_detail page: render took %.3fs, total %.3fs",

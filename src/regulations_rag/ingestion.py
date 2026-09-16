@@ -11,11 +11,10 @@ from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
 from openai import OpenAI
-from qdrant_client.models import PointStruct
 
 from regulations_rag.config import EmbeddingModelConfig
 from regulations_rag.repositories.documents_repository import DocumentRecord, DocumentsRepository
-from regulations_rag.repositories.vector_store import VectorStore
+from regulations_rag.repositories.vector_store import NewChunk, VectorStore
 
 RAW_DATA_DIR = Path("data/raw")
 
@@ -144,23 +143,21 @@ def ingest_file(
     source_file = path.name
     vectors = embed_chunks(chunks, embedding_config, openai_client)
 
-    points = [
-        PointStruct(
+    new_chunks = [
+        NewChunk(
             id=str(uuid.uuid4()),
             vector=vector,
-            payload={
-                "document_id": document_id,
-                "title": title,
-                "source_file": source_file,
-                "content_hash": file_hash,
-                "page": chunk.page,
-                "text": chunk.text,
-                "chunk_number": chunk_number,
-            },
+            document_id=document_id,
+            title=title,
+            source_file=source_file,
+            content_hash=file_hash,
+            page=chunk.page,
+            text=chunk.text,
+            chunk_number=chunk_number,
         )
         for chunk_number, (chunk, vector) in enumerate(zip(chunks, vectors))
     ]
-    vector_store.upsert_points(points)
+    vector_store.upsert_points(new_chunks)
 
 
 def ingest_new_document(

@@ -94,18 +94,16 @@ def test_ingest_file_upserts_points_with_document_id(mocker):
 
     fake_vector_store.upsert_points.assert_called_once()
 
-    points = fake_vector_store.upsert_points.call_args.args[0]
-    assert len(points) == 2
-    assert points[0].payload == {
-        "document_id": "doc-123",
-        "title": "PPWR",
-        "source_file": "ppwr.pdf",
-        "content_hash": "deadbeef",
-        "page": 1,
-        "text": "one",
-        "chunk_number": 0,
-    }
-    assert points[1].payload["chunk_number"] == 1
+    new_chunks = fake_vector_store.upsert_points.call_args.args[0]
+    assert len(new_chunks) == 2
+    assert new_chunks[0].document_id == "doc-123"
+    assert new_chunks[0].title == "PPWR"
+    assert new_chunks[0].source_file == "ppwr.pdf"
+    assert new_chunks[0].content_hash == "deadbeef"
+    assert new_chunks[0].page == 1
+    assert new_chunks[0].text == "one"
+    assert new_chunks[0].chunk_number == 0
+    assert new_chunks[1].chunk_number == 1
 
 
 def test_ingest_new_document_marks_indexed_on_success(mocker):

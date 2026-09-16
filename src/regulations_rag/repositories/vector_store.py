@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from functools import cache
 
 from qdrant_client import QdrantClient
@@ -9,14 +10,59 @@ from qdrant_client.models import (
     PayloadSchemaType,
     PointIdsList,
     PointStruct,
-    Record,
-    ScoredPoint,
     VectorParams,
 )
 
 from regulations_rag.config import QDRANT_COLLECTION, QDRANT_HOST, QDRANT_PORT, VECTOR_SIZE
 
 SCROLL_PAGE_SIZE = 256
+
+
+@dataclass
+class DocumentSummary:
+    document_id: str
+    title: str
+    source_file: str
+    content_hash: str
+
+
+@dataclass
+class DocumentMatch(DocumentSummary):
+    matched_on: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ChunkRecord:
+    id: str
+    document_id: str
+    title: str
+    source_file: str
+    content_hash: str
+    page: int
+    text: str
+    chunk_number: int
+
+
+@dataclass
+class NewChunk:
+    id: str
+    vector: list[float]
+    document_id: str
+    title: str
+    source_file: str
+    content_hash: str
+    page: int
+    text: str
+    chunk_number: int
+
+
+@dataclass
+class SearchResult:
+    title: str
+    source_file: str
+    page: int
+    text: str
+    score: float
 
 
 @cache
@@ -55,30 +101,23 @@ class VectorStore:
             if offset is None:
                 break
 
-    def list_documents(self) -> list[dict]:
-        """Return one entry per distinct ingested document (deduplicated across chunks).
-
-        Documents ingested before `document_id` existed are keyed by `source_file`
-        instead, so they remain addressable for matching/replacement.
-        """
-        documents: dict[str, dict] = {}
+    def list_documents(self) -> list[DocumentSummary]:
+        """Return one entry per distinct ingested document (deduplicated across chunks)."""
+        documents: dict[str, DocumentSummary] = {}
         for point in self._iter_all_points():
             payload = point.payload or {}
             document_id = payload.get("document_id")
-            key_field = "document_id" if document_id else "source_file"
-            key = document_id or payload.get("source_file")
-            if key is None or key in documents:
+            if document_id is None or document_id in documents:
                 continue
-            documents[key] = {
-                "key_field": key_field,
-                "key": key,
-                "title": payload.get("title"),
-                "source_file": payload.get("source_file"),
-                "content_hash": payload.get("content_hash"),
-            }
+            documents[document_id] = DocumentSummary(
+                document_id=document_id,
+                title=payload.get("title"),
+                source_file=payload.get("source_file"),
+                content_hash=payload.get("content_hash"),
+            )
         return list(documents.values())
 
-    def find_matches(self, content_hash: str, source_file: str, title: str) -> list[dict]:
+    def find_matches(self, content_hash: str, source_file: str, title: str) -> list[DocumentMatch]:
         """Find already-ingested documents that share the hash, filename, or title
         of a candidate document, so the caller can ask the user how to proceed.
         """
@@ -86,18 +125,26 @@ class VectorStore:
         normalized_title = title.strip().lower() if title else ""
         for document in self.list_documents():
             matched_on = []
-            if document["content_hash"] == content_hash:
+            if document.content_hash == content_hash:
                 matched_on.append("hash")
-            if document["source_file"] == source_file:
+            if document.source_file == source_file:
                 matched_on.append("filename")
-            doc_title = (document["title"] or "").strip().lower()
+            doc_title = (document.title or "").strip().lower()
             if normalized_title and doc_title == normalized_title:
                 matched_on.append("title")
             if matched_on:
-                matches.append({**document, "matched_on": matched_on})
+                matches.append(
+                    DocumentMatch(
+                        document_id=document.document_id,
+                        title=document.title,
+                        source_file=document.source_file,
+                        content_hash=document.content_hash,
+                        matched_on=matched_on,
+                    )
+                )
         return matches
 
-    def get_document_chunks(self, document_id: str) -> list[Record]:
+    def get_document_chunks(self, document_id: str) -> list[ChunkRecord]:
         """Return every chunk of a document, ordered by page.
 
         Qdrant's `order_by` cannot be combined with cursor-based pagination
@@ -106,7 +153,7 @@ class VectorStore:
         """
         if not self._client.collection_exists(QDRANT_COLLECTION):
             return []
-        points: list[Record] = []
+        points = []
         offset = None
         while True:
             page, offset = self._client.scroll(
@@ -122,16 +169,25 @@ class VectorStore:
             if offset is None:
                 break
         points.sort(key=lambda point: (point.payload or {}).get("page", 0))
-        return points
+        return [
+            ChunkRecord(
+                id=point.id,
+                document_id=(point.payload or {}).get("document_id"),
+                title=(point.payload or {}).get("title"),
+                source_file=(point.payload or {}).get("source_file"),
+                content_hash=(point.payload or {}).get("content_hash"),
+                page=(point.payload or {}).get("page"),
+                text=(point.payload or {}).get("text"),
+                chunk_number=(point.payload or {}).get("chunk_number"),
+            )
+            for point in points
+        ]
 
-    def get_document_point_ids(self, key_field: str, key: str) -> list[str]:
-        """Point IDs belonging to one document, identified by key_field/key
-        (as returned by list_documents/find_matches).
+    def get_document_point_ids(self, document_id: str) -> list[str]:
+        """Point IDs belonging to one document.
 
         Callers replacing a document should insert the new points first, then
-        delete these specific IDs — not filter-delete by key_field/key, since
-        when key_field is "source_file" the new points can share that same
-        filename and would otherwise be deleted too.
+        delete these specific IDs.
         """
         if not self._client.collection_exists(QDRANT_COLLECTION):
             return []
@@ -140,7 +196,9 @@ class VectorStore:
         while True:
             points, offset = self._client.scroll(
                 collection_name=QDRANT_COLLECTION,
-                scroll_filter=Filter(must=[FieldCondition(key=key_field, match=MatchValue(value=key))]),
+                scroll_filter=Filter(
+                    must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+                ),
                 limit=SCROLL_PAGE_SIZE,
                 with_payload=False,
                 offset=offset,
@@ -158,15 +216,41 @@ class VectorStore:
             points_selector=PointIdsList(points=point_ids),
         )
 
-    def upsert_points(self, points: list[PointStruct]) -> None:
+    def upsert_points(self, chunks: list[NewChunk]) -> None:
+        points = [
+            PointStruct(
+                id=chunk.id,
+                vector=chunk.vector,
+                payload={
+                    "document_id": chunk.document_id,
+                    "title": chunk.title,
+                    "source_file": chunk.source_file,
+                    "content_hash": chunk.content_hash,
+                    "page": chunk.page,
+                    "text": chunk.text,
+                    "chunk_number": chunk.chunk_number,
+                },
+            )
+            for chunk in chunks
+        ]
         self._client.upsert(collection_name=QDRANT_COLLECTION, points=points)
 
-    def search(self, query_vector: list[float], top_n: int) -> list[ScoredPoint]:
+    def search(self, query_vector: list[float], top_n: int) -> list[SearchResult]:
         if not self._client.collection_exists(QDRANT_COLLECTION):
             return []
-        return self._client.query_points(
+        points = self._client.query_points(
             collection_name=QDRANT_COLLECTION,
             query=query_vector,
             limit=top_n,
             with_payload=True,
         ).points
+        return [
+            SearchResult(
+                title=point.payload["title"],
+                source_file=point.payload["source_file"],
+                page=point.payload["page"],
+                text=point.payload["text"],
+                score=point.score,
+            )
+            for point in points
+        ]

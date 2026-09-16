@@ -62,12 +62,12 @@ for path in files:
     st.session_state.ingest_titles[path.name] = title
 
     matches = vector_store.find_matches(file_hash, path.name, title)
-    exact_match = next((m for m in matches if "hash" in m["matched_on"]), None)
+    exact_match = next((m for m in matches if "hash" in m.matched_on), None)
 
     if exact_match:
         st.success(
             f"Already up to date — matches existing document "
-            f"'{exact_match['title']}' ({exact_match['source_file']})"
+            f"'{exact_match.title}' ({exact_match.source_file})"
         )
         continue
 
@@ -79,11 +79,11 @@ for path in files:
         st.warning("This file looks like it might already be in the library:")
         for match in matches:
             st.write(
-                f"- **{match['title']}** ({match['source_file']}) — "
-                f"matched on: {', '.join(match['matched_on'])}"
+                f"- **{match.title}** ({match.source_file}) — "
+                f"matched on: {', '.join(match.matched_on)}"
             )
         options = ["Undo (skip this file)", "Add as a new file"] + [
-            f"Replace the file: {match['title']} ({match['source_file']})" for match in matches
+            f"Replace the file: {match.title} ({match.source_file})" for match in matches
         ]
         choice = st.radio(
             "What do you want to do?", options, key=f"action_{path.name}"
@@ -95,12 +95,9 @@ for path in files:
         else:
             replace_target = matches[options.index(choice) - 2]
             action = "replace"
-            # Snapshot which points to remove now — deleting by key_field/key
-            # after the new points are inserted could also catch the new
-            # points if they share the same source_file.
-            replace_point_ids = vector_store.get_document_point_ids(
-                replace_target["key_field"], replace_target["key"]
-            )
+            # Snapshot which points to remove now — inserting the new points
+            # first and deleting these specific IDs afterward.
+            replace_point_ids = vector_store.get_document_point_ids(replace_target.document_id)
     else:
         st.write("New file — will be ingested")
 
@@ -112,11 +109,7 @@ for path in files:
     total_cost += cost
     st.write(f"{tokens:,} tokens (~${cost:.4f})")
 
-    replace_document_id = (
-        replace_target["key"]
-        if replace_target and replace_target["key_field"] == "document_id"
-        else None
-    )
+    replace_document_id = replace_target.document_id if replace_target else None
 
     to_process.append(
         {
@@ -142,10 +135,7 @@ if to_process:
             with st.spinner(f"Embedding {item['path'].name}..."):
                 try:
                     if item["action"] == "replace":
-                        # A document replacing one ingested before document_id
-                        # existed (Qdrant-only, keyed by source_file) has no
-                        # prior id to keep, so it gets a fresh one.
-                        document_id = item["replace_document_id"] or str(uuid.uuid4())
+                        document_id = item["replace_document_id"]
                         ingestion.replace_document(
                             path=item["path"],
                             title=item["title"],
