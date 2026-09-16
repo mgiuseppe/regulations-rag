@@ -72,7 +72,7 @@ After Postgres is up, apply migrations:
 uv run alembic upgrade head
 ```
 
-When you change the `DocumentModel` in `documents_repository.py`, generate a
+When you change the `DocumentModel` in `repositories/documents_repository.py`, generate a
 new migration with:
 
 ```bash
@@ -93,19 +93,19 @@ Qdrant and Postgres, the **Documents** page to browse the catalog, and the
 ## Project structure
 
 ```
-data/raw/                                    source PDFs to ingest
-alembic/                                     Postgres schema migrations
-src/regulations_rag/ingestion.py             business logic: hash check, parse, chunk, embed, upsert in qdrant/postgres
-src/regulations_rag/retrieval.py             business logic: semantic search + generation
-src/regulations_rag/vector_store.py          wrapper: Qdrant connection and operations
-src/regulations_rag/documents_repository.py  wrapper: Postgres connection and document catalog (only file that knows SQLAlchemy)
-src/regulations_rag/app.py                   Streamlit entrypoint (multipage nav)
-src/regulations_rag/pages/chat.py            UI: chat, calls retrieval.py, shows answer + citations
-src/regulations_rag/pages/ingest.py          UI: ingestion, calls ingestion.py, shows cost + Confirm button
-src/regulations_rag/pages/documents.py       UI: paginated, sortable document catalog, calls documents_repository.py
-evals/                                       evals and golden dataset
-doc/                                         specs
-tests/                                       unit tests
+data/raw/                                                source PDFs to ingest
+alembic/                                                 Postgres schema migrations
+src/regulations_rag/ingestion.py                         business logic: hash check, parse, chunk, embed, upsert in qdrant/postgres
+src/regulations_rag/retrieval.py                         business logic: semantic search + generation
+src/regulations_rag/repositories/vector_store.py         wrapper: Qdrant connection and operations
+src/regulations_rag/repositories/documents_repository.py wrapper: Postgres connection and document catalog (only file that knows SQLAlchemy)
+src/regulations_rag/app.py                               Streamlit entrypoint (multipage nav)
+src/regulations_rag/pages/chat.py                        UI: chat, calls retrieval.py, shows answer + citations
+src/regulations_rag/pages/ingest.py                      UI: ingestion, calls ingestion.py, shows cost + Confirm button
+src/regulations_rag/pages/documents.py                   UI: paginated, sortable document catalog, calls documents_repository.py
+evals/                                                   evals and golden dataset
+doc/                                                      specs
+tests/                                                    unit tests
 ```
 
 ## Development

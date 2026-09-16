@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import create_engine
 
-from regulations_rag.documents_repository import (
+from regulations_rag.repositories.documents_repository import (
     STATUS_FAILED,
     STATUS_INDEXED,
     STATUS_PENDING,

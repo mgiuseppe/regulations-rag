@@ -3,9 +3,10 @@ import uuid
 import streamlit as st
 from openai import OpenAI
 
-from regulations_rag import ingestion, vector_store
+from regulations_rag import ingestion
 from regulations_rag.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_MODELS
-from regulations_rag.documents_repository import DocumentsRepository
+from regulations_rag.repositories import vector_store
+from regulations_rag.repositories.documents_repository import DocumentsRepository
 
 st.title("Ingest regulations")
 
