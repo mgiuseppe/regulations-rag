@@ -234,3 +234,23 @@ def replace_document(
         content_hash=file_hash,
         chunk_count=len(chunks),
     )
+
+
+def delete_document(
+    document_id: str,
+    vector_store: VectorStore,
+    documents_repo: DocumentsRepository,
+) -> None:
+    """Delete a document: row goes deleting -> removed, or -> deletion_failed
+    with the error message on any exception. Never left deleting without a
+    reason. Safe to retry from deletion_failed (or a stuck deleting row) since
+    deleting Qdrant chunks by document_id and deleting the Postgres row are
+    both no-ops once already done.
+    """
+    documents_repo.mark_deleting(document_id)
+    try:
+        vector_store.delete_document_chunks(document_id)
+        documents_repo.delete(document_id)
+    except Exception as exc:
+        documents_repo.mark_deletion_failed(document_id, str(exc))
+        raise

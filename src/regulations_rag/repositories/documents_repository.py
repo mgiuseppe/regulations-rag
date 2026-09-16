@@ -18,6 +18,8 @@ from regulations_rag.config import DATABASE_URL
 STATUS_PENDING = "pending"
 STATUS_INDEXED = "indexed"
 STATUS_FAILED = "failed"
+STATUS_DELETING = "deleting"
+STATUS_DELETION_FAILED = "deletion_failed"
 
 SORTABLE_FIELDS = ("title", "created_at", "file_name")
 DEFAULT_SORT_FIELD = "title"
@@ -154,6 +156,38 @@ class DocumentsRepository:
             session.commit()
             session.refresh(model)
             return _to_record(model)
+
+    def mark_deleting(self, document_id: str) -> DocumentRecord:
+        with self._session() as session:
+            model = session.get(DocumentModel, document_id)
+            if model is None:
+                raise ValueError(f"No document with id {document_id!r}")
+            model.status = STATUS_DELETING
+            model.error_message = None
+            model.updated_at = datetime.now(timezone.utc)
+            session.commit()
+            session.refresh(model)
+            return _to_record(model)
+
+    def mark_deletion_failed(self, document_id: str, error_message: str) -> DocumentRecord:
+        with self._session() as session:
+            model = session.get(DocumentModel, document_id)
+            if model is None:
+                raise ValueError(f"No document with id {document_id!r}")
+            model.status = STATUS_DELETION_FAILED
+            model.error_message = error_message
+            model.updated_at = datetime.now(timezone.utc)
+            session.commit()
+            session.refresh(model)
+            return _to_record(model)
+
+    def delete(self, document_id: str) -> None:
+        with self._session() as session:
+            model = session.get(DocumentModel, document_id)
+            if model is None:
+                return
+            session.delete(model)
+            session.commit()
 
     def get_by_id(self, document_id: str) -> DocumentRecord | None:
         with self._session() as session:
