@@ -1,12 +1,17 @@
+import logging
 import math
+import time
 
 import streamlit as st
 
 from regulations_rag.documents_repository import DocumentsRepository
 
-st.title("Documents")
+logger = logging.getLogger(__name__)
 
-documents_repo = DocumentsRepository()
+page_start = time.perf_counter()
+logger.info("documents page: start")
+
+st.title("Documents")
 
 PAGE_SIZE_OPTIONS = [5, 10, 20, 50]
 SORT_OPTIONS = {
@@ -33,9 +38,17 @@ if st.session_state.get("documents_sort_key") != sort_key:
 page = st.session_state.get("documents_page", 1)
 
 with st.spinner("Loading documents..."):
+    repo_init = time.perf_counter()
+    documents_repo = DocumentsRepository()
+    logger.info("documents page: DocumentsRepository init took %.3fs", time.perf_counter() - repo_init)
+
+    repo_start = time.perf_counter()
     documents, total = documents_repo.list_documents(
         page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order
     )
+    logger.info("documents page: list_documents took %.3fs", time.perf_counter() - repo_start)
+
+render_start = time.perf_counter()
 
 if total == 0:
     st.info("No documents ingested yet.")
@@ -72,3 +85,9 @@ with nav_next:
     if st.button("Next", disabled=page >= total_pages):
         st.session_state.documents_page = page + 1
         st.rerun()
+
+logger.info(
+    "documents page: render took %.3fs, total %.3fs",
+    time.perf_counter() - render_start,
+    time.perf_counter() - page_start,
+)
