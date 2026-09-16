@@ -1,7 +1,10 @@
+import os
 from dataclasses import dataclass
 from dotenv import load_dotenv
 
 load_dotenv()
+
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 
 @dataclass(frozen=True)
