@@ -4,7 +4,7 @@ import time
 
 import streamlit as st
 
-from regulations_rag.documents_repository import DocumentsRepository
+from regulations_rag.repositories.documents_repository import DocumentsRepository
 
 logger = logging.getLogger(__name__)
 

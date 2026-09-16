@@ -4,8 +4,8 @@ from typing import Iterator, Literal
 from openai import OpenAI
 from qdrant_client import QdrantClient
 
-from regulations_rag import vector_store
 from regulations_rag.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_MODELS, GENERATION_MODEL
+from regulations_rag.repositories import vector_store
 
 SYSTEM_PROMPT = (
     "You are a regulatory assistant. Answer the user's question using ONLY the "

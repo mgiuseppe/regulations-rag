@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from regulations_rag import vector_store
+from regulations_rag.repositories import vector_store
 
 
 def make_client(points):

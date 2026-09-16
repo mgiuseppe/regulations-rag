@@ -72,7 +72,7 @@ def test_embed_chunks_empty_list_skips_api_call():
 
 
 def test_ingest_file_upserts_points_with_document_id(mocker):
-    mock_upsert = mocker.patch("regulations_rag.vector_store.upsert_points")
+    mock_upsert = mocker.patch("regulations_rag.repositories.vector_store.upsert_points")
     mocker.patch(
         "regulations_rag.ingestion.embed_chunks",
         return_value=[[0.1, 0.2], [0.3, 0.4]],

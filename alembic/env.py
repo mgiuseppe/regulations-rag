@@ -6,7 +6,7 @@ from sqlalchemy import pool
 from alembic import context
 
 from regulations_rag.config import DATABASE_URL
-from regulations_rag.documents_repository import Base
+from regulations_rag.repositories.documents_repository import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

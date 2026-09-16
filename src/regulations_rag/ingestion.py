@@ -13,9 +13,9 @@ from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
 from openai import OpenAI
 from qdrant_client.models import PointStruct
 
-from regulations_rag import vector_store
 from regulations_rag.config import EmbeddingModelConfig
-from regulations_rag.documents_repository import DocumentRecord, DocumentsRepository
+from regulations_rag.repositories import vector_store
+from regulations_rag.repositories.documents_repository import DocumentRecord, DocumentsRepository
 
 RAW_DATA_DIR = Path("data/raw")
 

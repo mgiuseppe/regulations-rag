@@ -1,7 +1,7 @@
 import streamlit as st
 
-from regulations_rag import vector_store
-from regulations_rag.documents_repository import DocumentsRepository
+from regulations_rag.repositories import vector_store
+from regulations_rag.repositories.documents_repository import DocumentsRepository
 
 document_id = st.query_params.get("document_id")
 
