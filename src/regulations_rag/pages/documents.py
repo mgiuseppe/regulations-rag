@@ -1,8 +1,15 @@
+import logging
 import math
+import time
 
 import streamlit as st
 
 from regulations_rag.documents_repository import DocumentsRepository
+
+logger = logging.getLogger(__name__)
+
+page_start = time.perf_counter()
+logger.info("documents page: start")
 
 st.title("Documents")
 
@@ -33,9 +40,11 @@ if st.session_state.get("documents_sort_key") != sort_key:
 page = st.session_state.get("documents_page", 1)
 
 with st.spinner("Loading documents..."):
+    repo_start = time.perf_counter()
     documents, total = documents_repo.list_documents(
         page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order
     )
+    logger.info("documents page: list_documents took %.3fs", time.perf_counter() - repo_start)
 
 if total == 0:
     st.info("No documents ingested yet.")
@@ -51,6 +60,7 @@ header = st.columns([3, 3, 1, 1])
 for col, label in zip(header, ["Title", "File name", "Chunks", "Status"]):
     col.write(f"**{label}**")
 
+render_start = time.perf_counter()
 for doc in documents:
     row = st.columns([3, 3, 1, 1])
     row[0].page_link(
@@ -62,6 +72,11 @@ for doc in documents:
     row[1].write(doc.filename)
     row[2].write(doc.chunk_count)
     row[3].write(doc.status)
+logger.info(
+    "documents page: render loop took %.3fs, total %.3fs",
+    time.perf_counter() - render_start,
+    time.perf_counter() - page_start,
+)
 
 nav_prev, nav_info, nav_next = st.columns([1, 2, 1])
 with nav_prev:
