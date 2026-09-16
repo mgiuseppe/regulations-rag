@@ -20,8 +20,7 @@ SCROLL_PAGE_SIZE = 256
 
 @dataclass
 class DocumentSummary:
-    key_field: str
-    key: str
+    document_id: str
     title: str
     source_file: str
     content_hash: str
@@ -103,22 +102,15 @@ class VectorStore:
                 break
 
     def list_documents(self) -> list[DocumentSummary]:
-        """Return one entry per distinct ingested document (deduplicated across chunks).
-
-        Documents ingested before `document_id` existed are keyed by `source_file`
-        instead, so they remain addressable for matching/replacement.
-        """
+        """Return one entry per distinct ingested document (deduplicated across chunks)."""
         documents: dict[str, DocumentSummary] = {}
         for point in self._iter_all_points():
             payload = point.payload or {}
             document_id = payload.get("document_id")
-            key_field = "document_id" if document_id else "source_file"
-            key = document_id or payload.get("source_file")
-            if key is None or key in documents:
+            if document_id is None or document_id in documents:
                 continue
-            documents[key] = DocumentSummary(
-                key_field=key_field,
-                key=key,
+            documents[document_id] = DocumentSummary(
+                document_id=document_id,
                 title=payload.get("title"),
                 source_file=payload.get("source_file"),
                 content_hash=payload.get("content_hash"),
@@ -143,8 +135,7 @@ class VectorStore:
             if matched_on:
                 matches.append(
                     DocumentMatch(
-                        key_field=document.key_field,
-                        key=document.key,
+                        document_id=document.document_id,
                         title=document.title,
                         source_file=document.source_file,
                         content_hash=document.content_hash,
@@ -192,14 +183,11 @@ class VectorStore:
             for point in points
         ]
 
-    def get_document_point_ids(self, key_field: str, key: str) -> list[str]:
-        """Point IDs belonging to one document, identified by key_field/key
-        (as returned by list_documents/find_matches).
+    def get_document_point_ids(self, document_id: str) -> list[str]:
+        """Point IDs belonging to one document.
 
         Callers replacing a document should insert the new points first, then
-        delete these specific IDs — not filter-delete by key_field/key, since
-        when key_field is "source_file" the new points can share that same
-        filename and would otherwise be deleted too.
+        delete these specific IDs.
         """
         if not self._client.collection_exists(QDRANT_COLLECTION):
             return []
@@ -208,7 +196,9 @@ class VectorStore:
         while True:
             points, offset = self._client.scroll(
                 collection_name=QDRANT_COLLECTION,
-                scroll_filter=Filter(must=[FieldCondition(key=key_field, match=MatchValue(value=key))]),
+                scroll_filter=Filter(
+                    must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+                ),
                 limit=SCROLL_PAGE_SIZE,
                 with_payload=False,
                 offset=offset,

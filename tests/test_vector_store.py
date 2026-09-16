@@ -59,8 +59,7 @@ def test_list_documents_dedupes_by_document_id():
 
     assert documents == [
         DocumentSummary(
-            key_field="document_id",
-            key="doc-1",
+            document_id="doc-1",
             title="PPWR",
             source_file="ppwr.pdf",
             content_hash="abc",
@@ -68,21 +67,11 @@ def test_list_documents_dedupes_by_document_id():
     ]
 
 
-def test_list_documents_falls_back_to_source_file_when_no_document_id():
+def test_list_documents_skips_points_without_document_id():
     points = [make_point({"title": "REACH", "source_file": "reach.pdf", "content_hash": "cafe"})]
     store = VectorStore(make_client(points))
 
-    documents = store.list_documents()
-
-    assert documents == [
-        DocumentSummary(
-            key_field="source_file",
-            key="reach.pdf",
-            title="REACH",
-            source_file="reach.pdf",
-            content_hash="cafe",
-        )
-    ]
+    assert store.list_documents() == []
 
 
 def test_find_matches_by_hash_filename_and_title():
@@ -101,8 +90,7 @@ def test_find_matches_by_hash_filename_and_title():
     exact_hash = store.find_matches("abc", "different.pdf", "Different Title")
     assert exact_hash == [
         DocumentMatch(
-            key_field="document_id",
-            key="doc-1",
+            document_id="doc-1",
             title="PPWR",
             source_file="ppwr.pdf",
             content_hash="abc",
@@ -133,7 +121,7 @@ def test_find_matches_returns_empty_when_nothing_matches():
     assert store.find_matches("xyz", "reach.pdf", "REACH") == []
 
 
-def test_get_document_point_ids_returns_ids_matching_key_field():
+def test_get_document_point_ids_returns_matching_ids():
     points = [
         SimpleNamespace(id="p1", payload=None),
         SimpleNamespace(id="p2", payload=None),
@@ -144,7 +132,7 @@ def test_get_document_point_ids_returns_ids_matching_key_field():
     )
     store = VectorStore(client)
 
-    ids = store.get_document_point_ids("document_id", "doc-1")
+    ids = store.get_document_point_ids("doc-1")
 
     assert ids == ["p1", "p2"]
 
@@ -153,7 +141,7 @@ def test_get_document_point_ids_returns_empty_when_collection_missing():
     client = SimpleNamespace(collection_exists=lambda name: False)
     store = VectorStore(client)
 
-    assert store.get_document_point_ids("document_id", "doc-1") == []
+    assert store.get_document_point_ids("doc-1") == []
 
 
 def test_delete_points_deletes_by_id(mocker):

@@ -95,12 +95,9 @@ for path in files:
         else:
             replace_target = matches[options.index(choice) - 2]
             action = "replace"
-            # Snapshot which points to remove now — deleting by key_field/key
-            # after the new points are inserted could also catch the new
-            # points if they share the same source_file.
-            replace_point_ids = vector_store.get_document_point_ids(
-                replace_target.key_field, replace_target.key
-            )
+            # Snapshot which points to remove now — inserting the new points
+            # first and deleting these specific IDs afterward.
+            replace_point_ids = vector_store.get_document_point_ids(replace_target.document_id)
     else:
         st.write("New file — will be ingested")
 
@@ -112,11 +109,7 @@ for path in files:
     total_cost += cost
     st.write(f"{tokens:,} tokens (~${cost:.4f})")
 
-    replace_document_id = (
-        replace_target.key
-        if replace_target and replace_target.key_field == "document_id"
-        else None
-    )
+    replace_document_id = replace_target.document_id if replace_target else None
 
     to_process.append(
         {
@@ -142,10 +135,7 @@ if to_process:
             with st.spinner(f"Embedding {item['path'].name}..."):
                 try:
                     if item["action"] == "replace":
-                        # A document replacing one ingested before document_id
-                        # existed (Qdrant-only, keyed by source_file) has no
-                        # prior id to keep, so it gets a fresh one.
-                        document_id = item["replace_document_id"] or str(uuid.uuid4())
+                        document_id = item["replace_document_id"]
                         ingestion.replace_document(
                             path=item["path"],
                             title=item["title"],
