@@ -1,8 +1,11 @@
+import logging
 import os
 from dataclasses import dataclass
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 

@@ -1,8 +1,4 @@
-import logging
-
 import streamlit as st
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 ingest_page = st.Page("pages/ingest.py", title="Ingest", icon="📥")
 chat_page = st.Page("pages/chat.py", title="Chat", icon="💬", default=True)
