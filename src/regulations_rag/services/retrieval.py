@@ -31,6 +31,10 @@ class RetrievedChunk:
     text: str
     score: float
 
+    @property
+    def citation(self) -> str:
+        return f"{self.title}, page {self.page}"
+
 
 @dataclass
 class Message:
@@ -38,16 +42,10 @@ class Message:
     content: str
 
 
-def format_citation(chunk: RetrievedChunk) -> str:
-    return f"{chunk.title}, page {chunk.page}"
-
-
-def _build_context(chunks: list[RetrievedChunk]) -> str:
-    if not chunks:
-        return "No relevant context was found in the regulations database."
-    return "\n\n".join(
-        f"[{i}] {format_citation(chunk)}\n{chunk.text}" for i, chunk in enumerate(chunks, start=1)
-    )
+@dataclass
+class Answer:
+    citation_chunks: list[RetrievedChunk]
+    text: Iterator[str]
 
 
 @cache
@@ -65,12 +63,28 @@ class RetrievalService:
         self._llm_client = llm_client or _get_llm_client()
         self._vector_store = vector_store or _get_vector_store()
 
-    def embed_query(self, question: str, model_name: str = DEFAULT_EMBEDDING_MODEL) -> list[float]:
+    def answer(
+        self,
+        question: str,
+        history: list[Message] | None = None,
+        embed_model_name: str = DEFAULT_EMBEDDING_MODEL,
+        top_n_rank: int = TOP_N_CHUNKS,
+        llm_model: str = GENERATION_MODEL,
+    ) -> Answer:
+        query_vector = self._embed_query(question, embed_model_name)
+        chunks = self._search(query_vector, top_n_rank)
+        messages = self._build_messages(question, chunks, history or [])
+        return Answer(
+            citation_chunks=chunks,
+            text=self._generate_answer(messages, llm_model),
+        )
+
+    def _embed_query(self, question: str, model_name: str = DEFAULT_EMBEDDING_MODEL) -> list[float]:
         embedding_config = EMBEDDING_MODELS[model_name]
         response = self._llm_client.embeddings.create(model=embedding_config.name, input=[question])
         return response.data[0].embedding
 
-    def search(self, query_vector: list[float], top_n: int = TOP_N_CHUNKS) -> list[RetrievedChunk]:
+    def _search(self, query_vector: list[float], top_n: int = TOP_N_CHUNKS) -> list[RetrievedChunk]:
         results = self._vector_store.search(query_vector, top_n)
         return [
             RetrievedChunk(
@@ -83,7 +97,14 @@ class RetrievalService:
             for result in results
         ]
 
-    def build_messages(
+    def _build_context(self, chunks: list[RetrievedChunk]) -> str:
+        if not chunks:
+            return "No relevant context was found in the regulations database."
+        return "\n\n".join(
+            f"[{i}] {chunk.citation}\n{chunk.text}" for i, chunk in enumerate(chunks, start=1)
+        )
+
+    def _build_messages(
         self, question: str, chunks: list[RetrievedChunk], history: list[Message]
     ) -> list[dict]:
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -92,12 +113,12 @@ class RetrievalService:
         messages.append(
             {
                 "role": "user",
-                "content": f"Context:\n{_build_context(chunks)}\n\nQuestion: {question}",
+                "content": f"Context:\n{self._build_context(chunks)}\n\nQuestion: {question}",
             }
         )
         return messages
 
-    def generate_answer(self, messages: list[dict], model: str = GENERATION_MODEL) -> Iterator[str]:
+    def _generate_answer(self, messages: list[dict], model: str = GENERATION_MODEL) -> Iterator[str]:
         stream = self._llm_client.chat.completions.create(model=model, messages=messages, stream=True)
         for event in stream:
             delta = event.choices[0].delta.content
