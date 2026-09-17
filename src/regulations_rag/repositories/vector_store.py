@@ -216,6 +216,17 @@ class VectorStore:
             points_selector=PointIdsList(points=point_ids),
         )
 
+    def delete_document_chunks(self, document_id: str) -> None:
+        """Delete every chunk belonging to a document, identified by document_id."""
+        if not self._client.collection_exists(QDRANT_COLLECTION):
+            return
+        self._client.delete(
+            collection_name=QDRANT_COLLECTION,
+            points_selector=Filter(
+                must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+            ),
+        )
+
     def upsert_points(self, chunks: list[NewChunk]) -> None:
         points = [
             PointStruct(

@@ -4,9 +4,36 @@ import time
 
 import streamlit as st
 
-from regulations_rag.repositories.documents_repository import DocumentsRepository
+from regulations_rag import ingestion
+from regulations_rag.repositories.documents_repository import (
+    STATUS_DELETING,
+    STATUS_DELETION_FAILED,
+    DocumentsRepository,
+)
+from regulations_rag.repositories.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
+
+
+@st.dialog("Delete document")
+def _confirm_delete(doc, documents_repo: DocumentsRepository, vector_store: VectorStore) -> None:
+    st.warning(
+        f"This will permanently delete **{doc.title}** ({doc.filename}) and all "
+        "of its indexed content. This action cannot be undone."
+    )
+    if doc.status == STATUS_DELETION_FAILED and doc.error_message:
+        st.error(f"Previous attempt failed: {doc.error_message}")
+
+    confirm_col, cancel_col = st.columns(2)
+    if confirm_col.button("Delete permanently", type="primary", width="stretch"):
+        try:
+            ingestion.delete_document(doc.id, vector_store, documents_repo)
+        except Exception as exc:
+            st.error(f"Deletion failed: {exc}")
+        else:
+            st.rerun()
+    if cancel_col.button("Cancel", width="stretch"):
+        st.rerun()
 
 page_start = time.perf_counter()
 logger.info("documents page: start")
@@ -40,6 +67,7 @@ page = st.session_state.get("documents_page", 1)
 with st.spinner("Loading documents..."):
     repo_init = time.perf_counter()
     documents_repo = DocumentsRepository()
+    vector_store = VectorStore()
     logger.info("documents page: DocumentsRepository init took %.3fs", time.perf_counter() - repo_init)
 
     repo_start = time.perf_counter()
@@ -60,12 +88,12 @@ st.session_state.documents_page = page
 
 st.write(f"{total} document(s) — page {page} of {total_pages}")
 
-header = st.columns([3, 3, 1, 1])
-for col, label in zip(header, ["Title", "File name", "Chunks", "Status"]):
+header = st.columns([3, 3, 1, 1, 1])
+for col, label in zip(header, ["Title", "File name", "Chunks", "Status", ""]):
     col.write(f"**{label}**")
 
 for doc in documents:
-    row = st.columns([3, 3, 1, 1])
+    row = st.columns([3, 3, 1, 1, 1])
     row[0].page_link(
         "pages/document_detail.py",
         label=doc.title,
@@ -75,6 +103,10 @@ for doc in documents:
     row[1].write(doc.filename)
     row[2].write(doc.chunk_count)
     row[3].write(doc.status)
+    is_retry = doc.status in (STATUS_DELETING, STATUS_DELETION_FAILED)
+    action_label = "Retry delete" if is_retry else "Delete"
+    if row[4].button(action_label, key=f"delete_{doc.id}", icon=":material/delete:"):
+        _confirm_delete(doc, documents_repo, vector_store)
 
 nav_prev, nav_info, nav_next = st.columns([1, 2, 1])
 with nav_prev:
