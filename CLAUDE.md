@@ -99,6 +99,12 @@ The user opens a Streamlit chat, asks a question in natural language about the i
   `sys.path`, so a same-named file shadows the real package and self-imports
   forever (why the Qdrant wrapper is `vector_store.py`, not
   `qdrant_client.py`).
+- Code must be readable without conversation's context and CLAUDE.md: use descriptive
+  variable names (avoid names that imply the wrong state, e.g. `uploaded_files`
+  for files only selected but not yet uploaded), and add a short comment
+  wherever behavior depends on a non-obvious framework quirk (e.g. Streamlit's
+  rerun model, Qdrant's order_by/scroll incompatibility). CLAUDE.md alone
+  isn't visible to someone reading just that one file later.
 
 ## Structure
 `src/regulations_rag/` is an installable package (see `pyproject.toml`'s
