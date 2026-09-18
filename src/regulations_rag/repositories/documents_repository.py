@@ -140,7 +140,7 @@ class DocumentsRepository:
 
         Callers replacing a document's Qdrant chunks must call this only
         after the new chunks have been written to Qdrant, and must delete
-        the old chunks only after this call succeeds — see ingestion.py.
+        the old chunks only after this call succeeds — see services/ingestion.py.
         """
         with self._session() as session:
             model = session.get(DocumentModel, document_id)

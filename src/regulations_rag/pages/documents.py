@@ -4,12 +4,12 @@ import time
 
 import streamlit as st
 
-from regulations_rag import ingestion
 from regulations_rag.repositories.documents_repository import (
     STATUS_DELETING,
     STATUS_DELETION_FAILED,
     DocumentsRepository,
 )
+from regulations_rag.services import ingestion
 
 logger = logging.getLogger(__name__)
 

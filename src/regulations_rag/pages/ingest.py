@@ -2,15 +2,15 @@ import uuid
 
 import streamlit as st
 
-from regulations_rag import ingestion
 from regulations_rag.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_MODELS
+from regulations_rag.services import ingestion, parse_and_chunk
 
 st.title("Ingest regulations")
 
 @st.cache_data(show_spinner=False)
 def _parse_and_chunk_cached(path_str: str, file_hash: str, model_name: str):
     from pathlib import Path
-    return ingestion.parse_and_chunk(Path(path_str), EMBEDDING_MODELS[model_name])
+    return parse_and_chunk.parse_and_chunk(Path(path_str), EMBEDDING_MODELS[model_name])
 
 if "uploaded_paths" not in st.session_state:
     st.session_state.uploaded_paths = []
