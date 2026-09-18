@@ -17,14 +17,30 @@ FAKE_EMBEDDING_CONFIG = EmbeddingModelConfig(
 )
 
 
-def test_compute_file_hash(tmp_path: Path):
+def _make_service(
+    mocker, documents_repo=None, vector_store=None, llm_client=None, embedding_config=None
+):
+    documents_repo = documents_repo if documents_repo is not None else mocker.Mock()
+    vector_store = vector_store if vector_store is not None else mocker.Mock()
+    llm_client = llm_client if llm_client is not None else mocker.Mock()
+    embedding_config = embedding_config if embedding_config is not None else FAKE_EMBEDDING_CONFIG
+    return ingestion.IngestionService(
+        documents_repo=documents_repo,
+        vector_store=vector_store,
+        llm_client=llm_client,
+        embedding_config=embedding_config,
+    )
+
+
+def test_compute_file_hash(tmp_path: Path, mocker):
     file_path = tmp_path / "doc.pdf"
     file_path.write_bytes(b"hello world")
 
     import hashlib
 
     expected = hashlib.sha256(b"hello world").hexdigest()
-    assert ingestion.compute_file_hash(file_path) == expected
+    service = _make_service(mocker)
+    assert service.compute_file_hash(file_path) == expected
 
 
 @pytest.mark.parametrize(
@@ -34,25 +50,18 @@ def test_compute_file_hash(tmp_path: Path):
         ("ppwr.pdf", "Ppwr"),
     ],
 )
-def test_candidate_title_from_filename(filename, expected):
-    assert ingestion.candidate_title_from_filename(filename) == expected
+def test_candidate_title_from_filename(filename, expected, mocker):
+    service = _make_service(mocker)
+    assert service.candidate_title_from_filename(filename) == expected
 
 
-def test_estimate_cost():
+def test_estimate_cost(mocker):
     chunks = [Chunk(page=1, text="hello world"), Chunk(page=2, text="another chunk of text")]
-    total_tokens, total_cost = ingestion.estimate_cost(chunks, FAKE_EMBEDDING_CONFIG)
+    service = _make_service(mocker)
+    total_tokens, total_cost = service.estimate_cost(chunks)
 
     assert total_tokens > 0
     assert total_cost == pytest.approx(total_tokens / 1_000_000 * 0.02)
-
-
-def _make_service(mocker, documents_repo=None, vector_store=None, llm_client=None):
-    documents_repo = documents_repo if documents_repo is not None else mocker.Mock()
-    vector_store = vector_store if vector_store is not None else mocker.Mock()
-    llm_client = llm_client if llm_client is not None else mocker.Mock()
-    return ingestion.IngestionService(
-        documents_repo=documents_repo, vector_store=vector_store, llm_client=llm_client
-    )
 
 
 def test_init_ensures_qdrant_collection(mocker):
@@ -75,7 +84,7 @@ def test_embed_chunks_batches_all_texts(mocker):
     fake_client = SimpleNamespace(embeddings=SimpleNamespace(create=fake_create))
     service = _make_service(mocker, llm_client=fake_client)
 
-    vectors = service._embed_chunks(chunks, FAKE_EMBEDDING_CONFIG)
+    vectors = service._embed_chunks(chunks)
 
     assert vectors == [[0.1, 0.2], [0.1, 0.2]]
     assert captured["model"] == "text-embedding-3-small"
@@ -89,7 +98,7 @@ def test_embed_chunks_empty_list_skips_api_call(mocker):
     fake_client = SimpleNamespace(embeddings=SimpleNamespace(create=fake_create))
     service = _make_service(mocker, llm_client=fake_client)
 
-    assert service._embed_chunks([], FAKE_EMBEDDING_CONFIG) == []
+    assert service._embed_chunks([]) == []
 
 
 def test_ingest_file_upserts_points_with_document_id(mocker):
@@ -105,7 +114,6 @@ def test_ingest_file_upserts_points_with_document_id(mocker):
         chunks=chunks,
         file_hash="deadbeef",
         document_id="doc-123",
-        embedding_config=FAKE_EMBEDDING_CONFIG,
     )
 
     fake_vector_store.upsert_points.assert_called_once()
@@ -134,7 +142,6 @@ def test_ingest_new_document_marks_indexed_on_success(mocker):
         chunks=chunks,
         file_hash="deadbeef",
         document_id="doc-123",
-        embedding_config=FAKE_EMBEDDING_CONFIG,
     )
 
     fake_repo.create_pending.assert_called_once_with("doc-123", "ppwr.pdf", "PPWR", "deadbeef")
@@ -154,7 +161,6 @@ def test_ingest_new_document_marks_failed_on_exception(mocker):
             chunks=[Chunk(page=1, text="one")],
             file_hash="deadbeef",
             document_id="doc-123",
-            embedding_config=FAKE_EMBEDDING_CONFIG,
         )
 
     fake_repo.create_pending.assert_called_once()
@@ -178,7 +184,6 @@ def test_replace_document_writes_chunks_before_updating_postgres_row(mocker):
         chunks=[Chunk(page=1, text="one")],
         file_hash="deadbeef",
         document_id="doc-123",
-        embedding_config=FAKE_EMBEDDING_CONFIG,
     )
 
     assert call_order == ["ingest_file", "update_indexed"]
@@ -203,7 +208,6 @@ def test_replace_document_leaves_row_untouched_when_ingest_fails(mocker):
             chunks=[Chunk(page=1, text="one")],
             file_hash="deadbeef",
             document_id="doc-123",
-            embedding_config=FAKE_EMBEDDING_CONFIG,
         )
 
     fake_repo.get_by_id.assert_not_called()
@@ -223,7 +227,6 @@ def test_replace_document_creates_row_for_legacy_document(mocker):
         chunks=[Chunk(page=1, text="one")],
         file_hash="deadbeef",
         document_id="doc-123",
-        embedding_config=FAKE_EMBEDDING_CONFIG,
     )
 
     fake_repo.create_pending.assert_called_once_with("doc-123", "ppwr.pdf", "PPWR", "deadbeef")
@@ -251,7 +254,6 @@ def test_replace_document_snapshots_and_deletes_old_points_after_insert(mocker):
         chunks=[Chunk(page=1, text="one")],
         file_hash="deadbeef",
         document_id="doc-123",
-        embedding_config=FAKE_EMBEDDING_CONFIG,
     )
 
     assert call_order == ["snapshot", "ingest_file", ("delete", ["old-p1", "old-p2"])]

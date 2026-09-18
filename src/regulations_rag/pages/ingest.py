@@ -2,7 +2,7 @@ import uuid
 
 import streamlit as st
 
-from regulations_rag.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_MODELS
+from regulations_rag.config import EMBEDDING_MODELS
 from regulations_rag.services import ingestion, parse_and_chunk
 
 st.title("Ingest regulations")
@@ -38,7 +38,6 @@ if not paths:
 if "ingest_titles" not in st.session_state:
     st.session_state.ingest_titles = {}
 
-embedding_config = EMBEDDING_MODELS[DEFAULT_EMBEDDING_MODEL]
 ingestion_service = ingestion.IngestionService()
 
 to_process = []
@@ -47,12 +46,12 @@ total_cost = 0.0
 
 # Select files to append
 for path in paths:
-    file_hash = ingestion.compute_file_hash(path)
+    file_hash = ingestion_service.compute_file_hash(path)
 
     st.subheader(path.name)
 
     default_title = st.session_state.ingest_titles.get(
-        path.name, ingestion.candidate_title_from_filename(path.name)
+        path.name, ingestion_service.candidate_title_from_filename(path.name)
     )
     title = st.text_input("Title", value=default_title, key=f"title_{path.name}")
     st.session_state.ingest_titles[path.name] = title
@@ -95,9 +94,9 @@ for path in paths:
         st.write("New file — will be ingested")
 
     with st.spinner(f"Parsing {path.name}..."):
-        chunks = _parse_and_chunk_cached(str(path), file_hash, embedding_config.name)
+        chunks = _parse_and_chunk_cached(str(path), file_hash, ingestion_service.embedding_config.name)
 
-    tokens, cost = ingestion.estimate_cost(chunks, embedding_config)
+    tokens, cost = ingestion_service.estimate_cost(chunks)
     total_tokens += tokens
     total_cost += cost
     st.write(f"{tokens:,} tokens (~${cost:.4f})")
@@ -134,7 +133,6 @@ if to_process:
                             chunks=item["chunks"],
                             file_hash=item["file_hash"],
                             document_id=document_id,
-                            embedding_config=embedding_config,
                         )
                     else:
                         document_id = str(uuid.uuid4())
@@ -144,7 +142,6 @@ if to_process:
                             chunks=item["chunks"],
                             file_hash=item["file_hash"],
                             document_id=document_id,
-                            embedding_config=embedding_config,
                         )
                 except Exception as exc:
                     errors.append(f"{item['path'].name}: {exc}")
