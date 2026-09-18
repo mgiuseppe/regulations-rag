@@ -264,19 +264,13 @@ class IngestionService:
             file_hash=file_hash,
             document_id=document_id,
         )
-        if self._documents_repo.get_by_id(document_id) is None:
-            # Document existed only in Qdrant (ingested before Postgres
-            # tracking was added) — create its Postgres row now.
-            self._documents_repo.create_pending(document_id, path.name, title, file_hash)
-            record = self._documents_repo.mark_indexed(document_id, len(chunks))
-        else:
-            record = self._documents_repo.update_indexed(
-                document_id=document_id,
-                filename=path.name,
-                title=title,
-                content_hash=file_hash,
-                chunk_count=len(chunks),
-            )
+        record = self._documents_repo.update_indexed(
+            document_id=document_id,
+            filename=path.name,
+            title=title,
+            content_hash=file_hash,
+            chunk_count=len(chunks),
+        )
         self._vector_store.delete_points(old_point_ids)
         return record
 

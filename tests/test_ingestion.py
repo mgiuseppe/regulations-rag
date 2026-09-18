@@ -171,7 +171,6 @@ def test_ingest_new_document_marks_failed_on_exception(mocker):
 def test_replace_document_writes_chunks_before_updating_postgres_row(mocker):
     call_order = []
     fake_repo = mocker.Mock()
-    fake_repo.get_by_id.return_value = mocker.Mock()
     fake_repo.update_indexed.side_effect = lambda **kwargs: call_order.append("update_indexed")
     service = _make_service(mocker, documents_repo=fake_repo)
     mocker.patch.object(
@@ -210,28 +209,8 @@ def test_replace_document_leaves_row_untouched_when_ingest_fails(mocker):
             document_id="doc-123",
         )
 
-    fake_repo.get_by_id.assert_not_called()
     fake_repo.update_indexed.assert_not_called()
     fake_repo.create_pending.assert_not_called()
-
-
-def test_replace_document_creates_row_for_legacy_document(mocker):
-    fake_repo = mocker.Mock()
-    fake_repo.get_by_id.return_value = None
-    service = _make_service(mocker, documents_repo=fake_repo)
-    mocker.patch.object(service, "_ingest_file")
-
-    service.replace_document(
-        path=Path("data/raw/ppwr.pdf"),
-        title="PPWR",
-        chunks=[Chunk(page=1, text="one")],
-        file_hash="deadbeef",
-        document_id="doc-123",
-    )
-
-    fake_repo.create_pending.assert_called_once_with("doc-123", "ppwr.pdf", "PPWR", "deadbeef")
-    fake_repo.mark_indexed.assert_called_once_with("doc-123", 1)
-    fake_repo.update_indexed.assert_not_called()
 
 
 def test_replace_document_snapshots_and_deletes_old_points_after_insert(mocker):
@@ -242,7 +221,6 @@ def test_replace_document_snapshots_and_deletes_old_points_after_insert(mocker):
     )
     fake_vector_store.delete_points.side_effect = lambda ids: call_order.append(("delete", ids))
     fake_repo = mocker.Mock()
-    fake_repo.get_by_id.return_value = mocker.Mock()
     service = _make_service(mocker, documents_repo=fake_repo, vector_store=fake_vector_store)
     mocker.patch.object(
         service, "_ingest_file", side_effect=lambda **kwargs: call_order.append("ingest_file")
