@@ -10,36 +10,35 @@ from regulations_rag.repositories.vector_store import VectorStore
 
 st.title("Ingest regulations")
 
-embedding_config = EMBEDDING_MODELS[DEFAULT_EMBEDDING_MODEL]
-documents_repo = DocumentsRepository()
-
-
 @st.cache_data(show_spinner=False)
 def _parse_and_chunk_cached(path_str: str, file_hash: str, model_name: str):
     from pathlib import Path
     return ingestion.parse_and_chunk(Path(path_str), EMBEDDING_MODELS[model_name])
 
+embedding_config = EMBEDDING_MODELS[DEFAULT_EMBEDDING_MODEL]
+documents_repo = DocumentsRepository()
 vector_store = VectorStore()
+
 vector_store.ensure_collection()
 
 if "uploaded_paths" not in st.session_state:
     st.session_state.uploaded_paths = []
 
-uploaded_files = st.file_uploader(
+files_to_upload = st.file_uploader(
     "Upload PDF regulations", type="pdf", accept_multiple_files=True
 )
-if st.button("Upload", disabled=not uploaded_files):
+if st.button("Upload", disabled=not files_to_upload):
     ingestion.RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    for uploaded in uploaded_files:
+    for uploaded in files_to_upload:
         path = ingestion.RAW_DATA_DIR / uploaded.name
         path.write_bytes(uploaded.getvalue())
         if path not in st.session_state.uploaded_paths:
             st.session_state.uploaded_paths.append(path)
     st.rerun()
 
-files = st.session_state.uploaded_paths
+paths = st.session_state.uploaded_paths
 
-if not files:
+if not paths:
     st.info("Upload a PDF above to get started.")
     st.stop()
 
@@ -50,7 +49,7 @@ to_process = []
 total_tokens = 0
 total_cost = 0.0
 
-for path in files:
+for path in paths:
     file_hash = ingestion.compute_file_hash(path)
 
     st.subheader(path.name)
