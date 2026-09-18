@@ -3,10 +3,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from regulations_rag import ingestion
 from regulations_rag.config import EmbeddingModelConfig
-from regulations_rag.ingestion import Chunk, DocumentMatch, MatchResult
 from regulations_rag.repositories.documents_repository import STATUS_INDEXED, STATUS_PENDING
+from regulations_rag.services import ingestion
+from regulations_rag.services.ingestion import DocumentMatch, MatchResult
+from regulations_rag.services.parse_and_chunk import Chunk
 
 FAKE_EMBEDDING_CONFIG = EmbeddingModelConfig(
     name="text-embedding-3-small",
