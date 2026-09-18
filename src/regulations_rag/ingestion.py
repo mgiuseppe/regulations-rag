@@ -14,7 +14,7 @@ from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
 from openai import OpenAI
 
-from regulations_rag.config import EmbeddingModelConfig
+from regulations_rag.config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_MODELS, EmbeddingModelConfig
 from regulations_rag.repositories.documents_repository import (
     STATUS_INDEXED,
     DocumentRecord,
@@ -60,16 +60,6 @@ class MatchResult:
     ambiguous_matches: list[DocumentMatch]
 
 
-def candidate_title_from_filename(filename: str) -> str:
-    stem = Path(filename).stem
-    stem = re.sub(r"[_\-]+", " ", stem)
-    return stem.strip().title()
-
-
-def compute_file_hash(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _convert(path: Path, do_ocr: bool):
     pipeline_options = PdfPipelineOptions(do_ocr=do_ocr)
     converter = DocumentConverter(
@@ -102,15 +92,6 @@ def parse_and_chunk(path: Path, embedding_config: EmbeddingModelConfig) -> list[
         page = chunk.meta.doc_items[0].prov[0].page_no if chunk.meta.doc_items else 1
         chunks.append(Chunk(page=page, text=chunker.contextualize(chunk)))
     return chunks
-
-
-def estimate_cost(
-    chunks: list[Chunk], embedding_config: EmbeddingModelConfig
-) -> tuple[int, float]:
-    encoding = tiktoken.get_encoding(embedding_config.tokenizer_name)
-    total_tokens = sum(len(encoding.encode(chunk.text)) for chunk in chunks)
-    total_cost = total_tokens / 1_000_000 * embedding_config.cost_per_1m_tokens
-    return total_tokens, total_cost
 
 
 def _batch_chunks(
@@ -159,11 +140,31 @@ class IngestionService:
         documents_repo: DocumentsRepository | None = None,
         vector_store: VectorStore | None = None,
         llm_client: OpenAI | None = None,
+        embedding_config: EmbeddingModelConfig | None = None,
     ):
         self._documents_repo = documents_repo or _get_documents_repo()
         self._vector_store = vector_store or _get_vector_store()
         self._llm_client = llm_client or _get_llm_client()
+        self._embedding_config = embedding_config or EMBEDDING_MODELS[DEFAULT_EMBEDDING_MODEL]
         self._vector_store.ensure_collection()
+
+    @property
+    def embedding_config(self) -> EmbeddingModelConfig:
+        return self._embedding_config
+
+    def candidate_title_from_filename(self, filename: str) -> str:
+        stem = Path(filename).stem
+        stem = re.sub(r"[_\-]+", " ", stem)
+        return stem.strip().title()
+
+    def compute_file_hash(self, path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def estimate_cost(self, chunks: list[Chunk]) -> tuple[int, float]:
+        encoding = tiktoken.get_encoding(self._embedding_config.tokenizer_name)
+        total_tokens = sum(len(encoding.encode(chunk.text)) for chunk in chunks)
+        total_cost = total_tokens / 1_000_000 * self._embedding_config.cost_per_1m_tokens
+        return total_tokens, total_cost
 
     def find_matches(self, content_hash: str, source_file: str, title: str) -> MatchResult:
         """Find already-indexed documents that share the hash, filename, or title
@@ -217,17 +218,15 @@ class IngestionService:
             status=status, exact_matches=exact_matches, ambiguous_matches=ambiguous_matches
         )
 
-    def _embed_chunks(
-        self, chunks: list[Chunk], embedding_config: EmbeddingModelConfig
-    ) -> list[list[float]]:
+    def _embed_chunks(self, chunks: list[Chunk]) -> list[list[float]]:
         if not chunks:
             return []
 
-        encoding = tiktoken.get_encoding(embedding_config.tokenizer_name)
+        encoding = tiktoken.get_encoding(self._embedding_config.tokenizer_name)
         vectors: list[list[float]] = []
         for batch in _batch_chunks(chunks, encoding):
             response = self._llm_client.embeddings.create(
-                model=embedding_config.name,
+                model=self._embedding_config.name,
                 input=[chunk.text for chunk in batch],
             )
             vectors.extend(item.embedding for item in response.data)
@@ -240,10 +239,9 @@ class IngestionService:
         chunks: list[Chunk],
         file_hash: str,
         document_id: str,
-        embedding_config: EmbeddingModelConfig,
     ) -> None:
         source_file = path.name
-        vectors = self._embed_chunks(chunks, embedding_config)
+        vectors = self._embed_chunks(chunks)
 
         new_chunks = [
             NewChunk(
@@ -268,7 +266,6 @@ class IngestionService:
         chunks: list[Chunk],
         file_hash: str,
         document_id: str,
-        embedding_config: EmbeddingModelConfig,
     ) -> DocumentRecord:
         """Ingest a brand-new document: row goes pending -> indexed, or -> failed
         with the error message on any exception. Never left pending.
@@ -281,7 +278,6 @@ class IngestionService:
                 chunks=chunks,
                 file_hash=file_hash,
                 document_id=document_id,
-                embedding_config=embedding_config,
             )
         except Exception as exc:
             self._documents_repo.mark_failed(document_id, str(exc))
@@ -295,7 +291,6 @@ class IngestionService:
         chunks: list[Chunk],
         file_hash: str,
         document_id: str,
-        embedding_config: EmbeddingModelConfig,
     ) -> DocumentRecord:
         """Replace an existing document's content, keeping the same document_id.
 
@@ -316,7 +311,6 @@ class IngestionService:
             chunks=chunks,
             file_hash=file_hash,
             document_id=document_id,
-            embedding_config=embedding_config,
         )
         if self._documents_repo.get_by_id(document_id) is None:
             # Document existed only in Qdrant (ingested before Postgres
