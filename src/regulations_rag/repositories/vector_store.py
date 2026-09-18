@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cache
 
 from qdrant_client import QdrantClient
@@ -16,19 +16,6 @@ from qdrant_client.models import (
 from regulations_rag.config import QDRANT_COLLECTION, QDRANT_HOST, QDRANT_PORT, VECTOR_SIZE
 
 SCROLL_PAGE_SIZE = 256
-
-
-@dataclass
-class DocumentSummary:
-    document_id: str
-    title: str
-    source_file: str
-    content_hash: str
-
-
-@dataclass
-class DocumentMatch(DocumentSummary):
-    matched_on: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -85,64 +72,6 @@ class VectorStore:
             field_name="document_id",
             field_schema=PayloadSchemaType.KEYWORD,
         )
-
-    def _iter_all_points(self):
-        if not self._client.collection_exists(QDRANT_COLLECTION):
-            return
-        offset = None
-        while True:
-            points, offset = self._client.scroll(
-                collection_name=QDRANT_COLLECTION,
-                limit=SCROLL_PAGE_SIZE,
-                with_payload=True,
-                offset=offset,
-            )
-            yield from points
-            if offset is None:
-                break
-
-    def list_documents(self) -> list[DocumentSummary]:
-        """Return one entry per distinct ingested document (deduplicated across chunks)."""
-        documents: dict[str, DocumentSummary] = {}
-        for point in self._iter_all_points():
-            payload = point.payload or {}
-            document_id = payload.get("document_id")
-            if document_id is None or document_id in documents:
-                continue
-            documents[document_id] = DocumentSummary(
-                document_id=document_id,
-                title=payload.get("title"),
-                source_file=payload.get("source_file"),
-                content_hash=payload.get("content_hash"),
-            )
-        return list(documents.values())
-
-    def find_matches(self, content_hash: str, source_file: str, title: str) -> list[DocumentMatch]:
-        """Find already-ingested documents that share the hash, filename, or title
-        of a candidate document, so the caller can ask the user how to proceed.
-        """
-        matches = []
-        normalized_title = title.strip().lower() if title else ""
-        for document in self.list_documents():
-            matched_on = []
-            if document.content_hash == content_hash:
-                matched_on.append("hash")
-            if document.source_file == source_file:
-                matched_on.append("filename")
-            doc_title = (document.title or "").strip().lower()
-            if normalized_title and doc_title == normalized_title:
-                matched_on.append("title")
-            if matched_on:
-                matches.append(
-                    DocumentMatch(
-                        document_id=document.document_id,
-                        title=document.title,
-                        source_file=document.source_file,
-                        content_hash=document.content_hash,
-                        matched_on=matched_on,
-                    )
-                )
-        return matches
 
     def get_document_chunks(self, document_id: str) -> list[ChunkRecord]:
         """Return every chunk of a document, ordered by page.

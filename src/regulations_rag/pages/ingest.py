@@ -62,7 +62,7 @@ for path in paths:
     title = st.text_input("Title", value=default_title, key=f"title_{path.name}")
     st.session_state.ingest_titles[path.name] = title
 
-    matches = vector_store.find_matches(file_hash, path.name, title)
+    matches = documents_repo.find_matches(file_hash, path.name, title)
     exact_match = next((m for m in matches if "hash" in m.matched_on), None)
 
     if exact_match:

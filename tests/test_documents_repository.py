@@ -6,6 +6,7 @@ from regulations_rag.repositories.documents_repository import (
     STATUS_INDEXED,
     STATUS_PENDING,
     Base,
+    DocumentMatch,
     DocumentsRepository,
 )
 
@@ -92,3 +93,38 @@ def test_list_documents_sorts_and_paginates(repo):
 def test_list_documents_rejects_unknown_sort_field(repo):
     with pytest.raises(ValueError):
         repo.list_documents(sort_by="not_a_field")
+
+
+def test_find_matches_by_hash_filename_and_title(repo):
+    repo.create_pending("id-1", "ppwr.pdf", "PPWR", "abc")
+    repo.mark_indexed("id-1", chunk_count=3)
+
+    exact_hash = repo.find_matches("abc", "different.pdf", "Different Title")
+    assert exact_hash == [
+        DocumentMatch(
+            document_id="id-1",
+            title="PPWR",
+            source_file="ppwr.pdf",
+            content_hash="abc",
+            matched_on=["hash"],
+        )
+    ]
+
+    filename_match = repo.find_matches("xyz", "ppwr.pdf", "Different Title")
+    assert filename_match[0].matched_on == ["filename"]
+
+    title_match = repo.find_matches("xyz", "different.pdf", "ppwr")
+    assert title_match[0].matched_on == ["title"]
+
+
+def test_find_matches_returns_empty_when_nothing_matches(repo):
+    repo.create_pending("id-1", "ppwr.pdf", "PPWR", "abc")
+    repo.mark_indexed("id-1", chunk_count=3)
+
+    assert repo.find_matches("xyz", "reach.pdf", "REACH") == []
+
+
+def test_find_matches_ignores_non_indexed_documents(repo):
+    repo.create_pending("id-1", "ppwr.pdf", "PPWR", "abc")
+
+    assert repo.find_matches("abc", "ppwr.pdf", "PPWR") == []
