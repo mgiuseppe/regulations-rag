@@ -10,13 +10,12 @@ from regulations_rag.repositories.documents_repository import (
     STATUS_DELETION_FAILED,
     DocumentsRepository,
 )
-from regulations_rag.repositories.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
 
 @st.dialog("Delete document")
-def _confirm_delete(doc, documents_repo: DocumentsRepository, vector_store: VectorStore) -> None:
+def _confirm_delete(doc, ingestion_service: ingestion.IngestionService) -> None:
     st.warning(
         f"This will permanently delete **{doc.title}** ({doc.filename}) and all "
         "of its indexed content. This action cannot be undone."
@@ -27,7 +26,7 @@ def _confirm_delete(doc, documents_repo: DocumentsRepository, vector_store: Vect
     confirm_col, cancel_col = st.columns(2)
     if confirm_col.button("Delete permanently", type="primary", width="stretch"):
         try:
-            ingestion.delete_document(doc.id, vector_store, documents_repo)
+            ingestion_service.delete_document(doc.id)
         except Exception as exc:
             st.error(f"Deletion failed: {exc}")
         else:
@@ -67,7 +66,6 @@ page = st.session_state.get("documents_page", 1)
 with st.spinner("Loading documents..."):
     repo_init = time.perf_counter()
     documents_repo = DocumentsRepository()
-    vector_store = VectorStore()
     logger.info("documents page: DocumentsRepository init took %.3fs", time.perf_counter() - repo_init)
 
     repo_start = time.perf_counter()
@@ -106,7 +104,10 @@ for doc in documents:
     is_retry = doc.status in (STATUS_DELETING, STATUS_DELETION_FAILED)
     action_label = "Retry delete" if is_retry else "Delete"
     if row[4].button(action_label, key=f"delete_{doc.id}", icon=":material/delete:"):
-        _confirm_delete(doc, documents_repo, vector_store)
+        # Constructed lazily (only when a delete is actually requested) since
+        # it calls Qdrant's ensure_collection() on construction, which the
+        # listing above doesn't need.
+        _confirm_delete(doc, ingestion.IngestionService(documents_repo=documents_repo))
 
 nav_prev, nav_info, nav_next = st.columns([1, 2, 1])
 with nav_prev:
