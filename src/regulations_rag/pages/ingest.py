@@ -15,26 +15,22 @@ def _parse_and_chunk_cached(path_str: str, file_hash: str, model_name: str):
     from pathlib import Path
     return ingestion.parse_and_chunk(Path(path_str), EMBEDDING_MODELS[model_name])
 
-embedding_config = EMBEDDING_MODELS[DEFAULT_EMBEDDING_MODEL]
-documents_repo = DocumentsRepository()
-vector_store = VectorStore()
-
-vector_store.ensure_collection()
-
 if "uploaded_paths" not in st.session_state:
     st.session_state.uploaded_paths = []
 
+# upload files on server
 files_to_upload = st.file_uploader(
     "Upload PDF regulations", type="pdf", accept_multiple_files=True
 )
 if st.button("Upload", disabled=not files_to_upload):
-    ingestion.RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    for uploaded in files_to_upload:
-        path = ingestion.RAW_DATA_DIR / uploaded.name
-        path.write_bytes(uploaded.getvalue())
-        if path not in st.session_state.uploaded_paths:
-            st.session_state.uploaded_paths.append(path)
-    st.rerun()
+    with st.spinner(f"Uploading..."):
+        for uploaded in files_to_upload:
+            ingestion.RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
+            path = ingestion.RAW_DATA_DIR / uploaded.name
+            path.write_bytes(uploaded.getvalue())
+            if path not in st.session_state.uploaded_paths:
+                st.session_state.uploaded_paths.append(path)
+        st.rerun()
 
 paths = st.session_state.uploaded_paths
 
@@ -45,10 +41,16 @@ if not paths:
 if "ingest_titles" not in st.session_state:
     st.session_state.ingest_titles = {}
 
+embedding_config = EMBEDDING_MODELS[DEFAULT_EMBEDDING_MODEL]
+documents_repo = DocumentsRepository()
+vector_store = VectorStore()
+vector_store.ensure_collection()
+
 to_process = []
 total_tokens = 0
 total_cost = 0.0
 
+# Select files to append
 for path in paths:
     file_hash = ingestion.compute_file_hash(path)
 
@@ -122,6 +124,7 @@ for path in paths:
         }
     )
 
+# Process files
 if to_process:
     st.divider()
     st.write(f"**Total: {total_tokens:,} tokens (~${total_cost:.4f})**")
