@@ -5,7 +5,7 @@ import pytest
 
 from regulations_rag import ingestion
 from regulations_rag.config import EmbeddingModelConfig
-from regulations_rag.ingestion import Chunk, DocumentMatch
+from regulations_rag.ingestion import Chunk, DocumentMatch, MatchResult
 from regulations_rag.repositories.documents_repository import STATUS_INDEXED, STATUS_PENDING
 
 FAKE_EMBEDDING_CONFIG = EmbeddingModelConfig(
@@ -233,26 +233,43 @@ def _record(id, title, filename, content_hash, status=STATUS_INDEXED):
     return SimpleNamespace(id=id, title=title, filename=filename, content_hash=content_hash, status=status)
 
 
-def test_find_matches_by_hash_filename_and_title(mocker):
+def test_find_matches_hash_match_is_exact(mocker):
     fake_repo = mocker.Mock()
     fake_repo.get_by_content_hash.return_value = _record("id-1", "PPWR", "ppwr.pdf", "abc")
     fake_repo.get_by_filename.return_value = None
     fake_repo.get_by_title.return_value = None
 
-    matches = ingestion.find_matches("abc", "different.pdf", "Different Title", fake_repo)
+    result = ingestion.find_matches("abc", "different.pdf", "Different Title", fake_repo)
 
-    assert matches == [
-        DocumentMatch(
-            document_id="id-1",
-            title="PPWR",
-            source_file="ppwr.pdf",
-            content_hash="abc",
-            matched_on=["hash"],
-        )
-    ]
+    assert result == MatchResult(
+        status="exact_match",
+        exact_matches=[
+            DocumentMatch(
+                document_id="id-1",
+                title="PPWR",
+                source_file="ppwr.pdf",
+                content_hash="abc",
+                matched_on=["hash"],
+            )
+        ],
+        ambiguous_matches=[],
+    )
     fake_repo.get_by_content_hash.assert_called_once_with("abc")
     fake_repo.get_by_filename.assert_called_once_with("different.pdf")
     fake_repo.get_by_title.assert_called_once_with("Different Title")
+
+
+def test_find_matches_filename_or_title_match_is_ambiguous(mocker):
+    fake_repo = mocker.Mock()
+    fake_repo.get_by_content_hash.return_value = None
+    fake_repo.get_by_filename.return_value = _record("id-1", "PPWR", "ppwr.pdf", "abc")
+    fake_repo.get_by_title.return_value = None
+
+    result = ingestion.find_matches("xyz", "ppwr.pdf", "Different Title", fake_repo)
+
+    assert result.status == "ambiguous"
+    assert result.exact_matches == []
+    assert [m.matched_on for m in result.ambiguous_matches] == [["filename"]]
 
 
 def test_find_matches_merges_matched_on_for_the_same_document(mocker):
@@ -262,19 +279,22 @@ def test_find_matches_merges_matched_on_for_the_same_document(mocker):
     fake_repo.get_by_filename.return_value = same_doc
     fake_repo.get_by_title.return_value = None
 
-    matches = ingestion.find_matches("abc", "ppwr.pdf", "Different Title", fake_repo)
+    result = ingestion.find_matches("abc", "ppwr.pdf", "Different Title", fake_repo)
 
-    assert len(matches) == 1
-    assert matches[0].matched_on == ["hash", "filename"]
+    assert result.status == "exact_match"
+    assert len(result.exact_matches) == 1
+    assert result.exact_matches[0].matched_on == ["hash", "filename"]
 
 
-def test_find_matches_returns_empty_when_nothing_matches(mocker):
+def test_find_matches_returns_no_match_when_nothing_matches(mocker):
     fake_repo = mocker.Mock()
     fake_repo.get_by_content_hash.return_value = None
     fake_repo.get_by_filename.return_value = None
     fake_repo.get_by_title.return_value = None
 
-    assert ingestion.find_matches("xyz", "reach.pdf", "REACH", fake_repo) == []
+    result = ingestion.find_matches("xyz", "reach.pdf", "REACH", fake_repo)
+
+    assert result == MatchResult(status="no_match", exact_matches=[], ambiguous_matches=[])
 
 
 def test_find_matches_ignores_non_indexed_documents(mocker):
@@ -285,7 +305,9 @@ def test_find_matches_ignores_non_indexed_documents(mocker):
     fake_repo.get_by_filename.return_value = None
     fake_repo.get_by_title.return_value = None
 
-    assert ingestion.find_matches("abc", "ppwr.pdf", "PPWR", fake_repo) == []
+    result = ingestion.find_matches("abc", "ppwr.pdf", "PPWR", fake_repo)
+
+    assert result.status == "no_match"
 
 
 def test_find_matches_skips_title_lookup_when_title_is_blank(mocker):

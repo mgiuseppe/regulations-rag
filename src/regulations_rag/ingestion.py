@@ -3,6 +3,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import tiktoken
 from docling.datamodel.base_models import InputFormat
@@ -48,6 +49,16 @@ class DocumentMatch:
     matched_on: list[str]
 
 
+MatchStatus = Literal["exact_match", "ambiguous", "no_match"]
+
+
+@dataclass
+class MatchResult:
+    status: MatchStatus
+    exact_matches: list[DocumentMatch]
+    ambiguous_matches: list[DocumentMatch]
+
+
 def candidate_title_from_filename(filename: str) -> str:
     stem = Path(filename).stem
     stem = re.sub(r"[_\-]+", " ", stem)
@@ -60,9 +71,14 @@ def compute_file_hash(path: Path) -> str:
 
 def find_matches(
     content_hash: str, source_file: str, title: str, documents_repo: DocumentsRepository
-) -> list[DocumentMatch]:
+) -> MatchResult:
     """Find already-indexed documents that share the hash, filename, or title
-    of a candidate upload, so the caller can ask the user how to proceed.
+    of a candidate upload, and classify the result so the caller can decide
+    how to proceed without re-deriving the match logic itself:
+    - "exact_match": a document with the same content hash already exists
+    - "ambiguous": no hash match, but one or more documents share the
+      filename or title — the caller should ask the user how to proceed
+    - "no_match": nothing shares any signal — treat the upload as new
 
     Looks up each signal with its own indexed query rather than scanning the
     whole catalog; a record is only treated as a match if it's STATUS_INDEXED
@@ -83,7 +99,7 @@ def find_matches(
     if title.strip():
         _register(documents_repo.get_by_title(title), "title")
 
-    return [
+    matches = [
         DocumentMatch(
             document_id=record.id,
             title=record.title,
@@ -93,6 +109,19 @@ def find_matches(
         )
         for record in candidates.values()
     ]
+    exact_matches = [m for m in matches if "hash" in m.matched_on]
+    ambiguous_matches = [m for m in matches if "hash" not in m.matched_on]
+
+    if exact_matches:
+        status: MatchStatus = "exact_match"
+    elif ambiguous_matches:
+        status = "ambiguous"
+    else:
+        status = "no_match"
+
+    return MatchResult(
+        status=status, exact_matches=exact_matches, ambiguous_matches=ambiguous_matches
+    )
 
 
 def _convert(path: Path, do_ocr: bool):

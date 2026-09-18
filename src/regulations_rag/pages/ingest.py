@@ -62,10 +62,10 @@ for path in paths:
     title = st.text_input("Title", value=default_title, key=f"title_{path.name}")
     st.session_state.ingest_titles[path.name] = title
 
-    matches = ingestion.find_matches(file_hash, path.name, title, documents_repo)
-    exact_match = next((m for m in matches if "hash" in m.matched_on), None)
+    match_result = ingestion.find_matches(file_hash, path.name, title, documents_repo)
 
-    if exact_match:
+    if match_result.status == "exact_match":
+        exact_match = match_result.exact_matches[0]
         st.success(
             f"Already up to date — matches existing document "
             f"'{exact_match.title}' ({exact_match.source_file})"
@@ -76,15 +76,16 @@ for path in paths:
     replace_target = None
     replace_point_ids = None
 
-    if matches:
+    if match_result.status == "ambiguous":
+        ambiguous_matches = match_result.ambiguous_matches
         st.warning("This file looks like it might already be in the library:")
-        for match in matches:
+        for match in ambiguous_matches:
             st.write(
                 f"- **{match.title}** ({match.source_file}) — "
                 f"matched on: {', '.join(match.matched_on)}"
             )
         options = ["Undo (skip this file)", "Add as a new file"] + [
-            f"Replace the file: {match.title} ({match.source_file})" for match in matches
+            f"Replace the file: {match.title} ({match.source_file})" for match in ambiguous_matches
         ]
         choice = st.radio(
             "What do you want to do?", options, key=f"action_{path.name}"
@@ -94,7 +95,7 @@ for path in paths:
         if choice == "Add as a new file":
             action = "new"
         else:
-            replace_target = matches[options.index(choice) - 2]
+            replace_target = ambiguous_matches[options.index(choice) - 2]
             action = "replace"
             # Snapshot which points to remove now — inserting the new points
             # first and deleting these specific IDs afterward.
