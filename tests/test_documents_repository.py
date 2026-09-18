@@ -6,7 +6,6 @@ from regulations_rag.repositories.documents_repository import (
     STATUS_INDEXED,
     STATUS_PENDING,
     Base,
-    DocumentMatch,
     DocumentsRepository,
 )
 
@@ -95,36 +94,21 @@ def test_list_documents_rejects_unknown_sort_field(repo):
         repo.list_documents(sort_by="not_a_field")
 
 
-def test_find_matches_by_hash_filename_and_title(repo):
+def test_get_by_filename_finds_only_indexed_documents(repo):
     repo.create_pending("id-1", "ppwr.pdf", "PPWR", "abc")
     repo.mark_indexed("id-1", chunk_count=3)
+    repo.create_pending("id-2", "pending.pdf", "Pending Doc", "def")
 
-    exact_hash = repo.find_matches("abc", "different.pdf", "Different Title")
-    assert exact_hash == [
-        DocumentMatch(
-            document_id="id-1",
-            title="PPWR",
-            source_file="ppwr.pdf",
-            content_hash="abc",
-            matched_on=["hash"],
-        )
-    ]
-
-    filename_match = repo.find_matches("xyz", "ppwr.pdf", "Different Title")
-    assert filename_match[0].matched_on == ["filename"]
-
-    title_match = repo.find_matches("xyz", "different.pdf", "ppwr")
-    assert title_match[0].matched_on == ["title"]
+    assert repo.get_by_filename("ppwr.pdf").id == "id-1"
+    assert repo.get_by_filename("pending.pdf") is None
+    assert repo.get_by_filename("does-not-exist.pdf") is None
 
 
-def test_find_matches_returns_empty_when_nothing_matches(repo):
+def test_get_by_title_finds_only_indexed_documents_case_insensitively(repo):
     repo.create_pending("id-1", "ppwr.pdf", "PPWR", "abc")
     repo.mark_indexed("id-1", chunk_count=3)
+    repo.create_pending("id-2", "pending.pdf", "Pending Doc", "def")
 
-    assert repo.find_matches("xyz", "reach.pdf", "REACH") == []
-
-
-def test_find_matches_ignores_non_indexed_documents(repo):
-    repo.create_pending("id-1", "ppwr.pdf", "PPWR", "abc")
-
-    assert repo.find_matches("abc", "ppwr.pdf", "PPWR") == []
+    assert repo.get_by_title("ppwr").id == "id-1"
+    assert repo.get_by_title("Pending Doc") is None
+    assert repo.get_by_title("does not exist") is None

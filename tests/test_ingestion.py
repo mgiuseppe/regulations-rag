@@ -5,7 +5,8 @@ import pytest
 
 from regulations_rag import ingestion
 from regulations_rag.config import EmbeddingModelConfig
-from regulations_rag.ingestion import Chunk
+from regulations_rag.ingestion import Chunk, DocumentMatch
+from regulations_rag.repositories.documents_repository import STATUS_INDEXED, STATUS_PENDING
 
 FAKE_EMBEDDING_CONFIG = EmbeddingModelConfig(
     name="text-embedding-3-small",
@@ -226,3 +227,72 @@ def test_replace_document_creates_row_for_legacy_document(mocker):
     fake_repo.create_pending.assert_called_once_with("doc-123", "ppwr.pdf", "PPWR", "deadbeef")
     fake_repo.mark_indexed.assert_called_once_with("doc-123", 1)
     fake_repo.update_indexed.assert_not_called()
+
+
+def _record(id, title, filename, content_hash, status=STATUS_INDEXED):
+    return SimpleNamespace(id=id, title=title, filename=filename, content_hash=content_hash, status=status)
+
+
+def test_find_matches_by_hash_filename_and_title(mocker):
+    fake_repo = mocker.Mock()
+    fake_repo.get_by_content_hash.return_value = _record("id-1", "PPWR", "ppwr.pdf", "abc")
+    fake_repo.get_by_filename.return_value = None
+    fake_repo.get_by_title.return_value = None
+
+    matches = ingestion.find_matches("abc", "different.pdf", "Different Title", fake_repo)
+
+    assert matches == [
+        DocumentMatch(
+            document_id="id-1",
+            title="PPWR",
+            source_file="ppwr.pdf",
+            content_hash="abc",
+            matched_on=["hash"],
+        )
+    ]
+    fake_repo.get_by_content_hash.assert_called_once_with("abc")
+    fake_repo.get_by_filename.assert_called_once_with("different.pdf")
+    fake_repo.get_by_title.assert_called_once_with("Different Title")
+
+
+def test_find_matches_merges_matched_on_for_the_same_document(mocker):
+    same_doc = _record("id-1", "PPWR", "ppwr.pdf", "abc")
+    fake_repo = mocker.Mock()
+    fake_repo.get_by_content_hash.return_value = same_doc
+    fake_repo.get_by_filename.return_value = same_doc
+    fake_repo.get_by_title.return_value = None
+
+    matches = ingestion.find_matches("abc", "ppwr.pdf", "Different Title", fake_repo)
+
+    assert len(matches) == 1
+    assert matches[0].matched_on == ["hash", "filename"]
+
+
+def test_find_matches_returns_empty_when_nothing_matches(mocker):
+    fake_repo = mocker.Mock()
+    fake_repo.get_by_content_hash.return_value = None
+    fake_repo.get_by_filename.return_value = None
+    fake_repo.get_by_title.return_value = None
+
+    assert ingestion.find_matches("xyz", "reach.pdf", "REACH", fake_repo) == []
+
+
+def test_find_matches_ignores_non_indexed_documents(mocker):
+    fake_repo = mocker.Mock()
+    fake_repo.get_by_content_hash.return_value = _record(
+        "id-1", "PPWR", "ppwr.pdf", "abc", status=STATUS_PENDING
+    )
+    fake_repo.get_by_filename.return_value = None
+    fake_repo.get_by_title.return_value = None
+
+    assert ingestion.find_matches("abc", "ppwr.pdf", "PPWR", fake_repo) == []
+
+
+def test_find_matches_skips_title_lookup_when_title_is_blank(mocker):
+    fake_repo = mocker.Mock()
+    fake_repo.get_by_content_hash.return_value = None
+    fake_repo.get_by_filename.return_value = None
+
+    ingestion.find_matches("xyz", "reach.pdf", "  ", fake_repo)
+
+    fake_repo.get_by_title.assert_not_called()

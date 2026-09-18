@@ -13,7 +13,11 @@ from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
 from openai import OpenAI
 
 from regulations_rag.config import EmbeddingModelConfig
-from regulations_rag.repositories.documents_repository import DocumentRecord, DocumentsRepository
+from regulations_rag.repositories.documents_repository import (
+    STATUS_INDEXED,
+    DocumentRecord,
+    DocumentsRepository,
+)
 from regulations_rag.repositories.vector_store import NewChunk, VectorStore
 
 RAW_DATA_DIR = Path("data/raw")
@@ -35,6 +39,15 @@ class Chunk:
     text: str
 
 
+@dataclass
+class DocumentMatch:
+    document_id: str
+    title: str
+    source_file: str
+    content_hash: str
+    matched_on: list[str]
+
+
 def candidate_title_from_filename(filename: str) -> str:
     stem = Path(filename).stem
     stem = re.sub(r"[_\-]+", " ", stem)
@@ -43,6 +56,43 @@ def candidate_title_from_filename(filename: str) -> str:
 
 def compute_file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def find_matches(
+    content_hash: str, source_file: str, title: str, documents_repo: DocumentsRepository
+) -> list[DocumentMatch]:
+    """Find already-indexed documents that share the hash, filename, or title
+    of a candidate upload, so the caller can ask the user how to proceed.
+
+    Looks up each signal with its own indexed query rather than scanning the
+    whole catalog; a record is only treated as a match if it's STATUS_INDEXED
+    (a pending/failed row has no usable chunks in Qdrant yet, so it isn't
+    really "in the library").
+    """
+    candidates: dict[str, DocumentRecord] = {}
+    matched_on_by_id: dict[str, list[str]] = {}
+
+    def _register(record: DocumentRecord | None, reason: str) -> None:
+        if record is None or record.status != STATUS_INDEXED:
+            return
+        candidates[record.id] = record
+        matched_on_by_id.setdefault(record.id, []).append(reason)
+
+    _register(documents_repo.get_by_content_hash(content_hash), "hash")
+    _register(documents_repo.get_by_filename(source_file), "filename")
+    if title.strip():
+        _register(documents_repo.get_by_title(title), "title")
+
+    return [
+        DocumentMatch(
+            document_id=record.id,
+            title=record.title,
+            source_file=record.filename,
+            content_hash=record.content_hash,
+            matched_on=matched_on_by_id[record.id],
+        )
+        for record in candidates.values()
+    ]
 
 
 def _convert(path: Path, do_ocr: bool):

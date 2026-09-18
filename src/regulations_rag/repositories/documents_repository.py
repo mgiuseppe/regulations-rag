@@ -5,7 +5,7 @@ Everything else (pages, ingestion logic) exchanges plain `DocumentRecord`
 objects with `DocumentsRepository`.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import cache
 
@@ -54,15 +54,6 @@ class DocumentRecord:
     chunk_count: int
     status: str
     error_message: str | None
-
-
-@dataclass
-class DocumentMatch:
-    document_id: str
-    title: str
-    source_file: str
-    content_hash: str
-    matched_on: list[str] = field(default_factory=list)
 
 
 def _to_record(model: DocumentModel) -> DocumentRecord:
@@ -210,38 +201,35 @@ class DocumentsRepository:
             )
             return _to_record(model) if model else None
 
-    def find_matches(self, content_hash: str, source_file: str, title: str) -> list[DocumentMatch]:
-        """Find already-indexed documents that share the hash, filename, or title
-        of a candidate document, so the caller can ask the user how to proceed.
+    def get_by_filename(self, filename: str) -> DocumentRecord | None:
+        """Look up an indexed document by exact filename.
 
         Only STATUS_INDEXED rows are considered — a pending or failed row has
         no usable chunks in Qdrant yet, so it isn't really "in the library".
         """
-        normalized_title = title.strip().lower() if title else ""
-        matches = []
         with self._session() as session:
-            models = session.scalars(
-                select(DocumentModel).where(DocumentModel.status == STATUS_INDEXED)
-            ).all()
-            for model in models:
-                matched_on = []
-                if model.content_hash == content_hash:
-                    matched_on.append("hash")
-                if model.filename == source_file:
-                    matched_on.append("filename")
-                if normalized_title and model.title.strip().lower() == normalized_title:
-                    matched_on.append("title")
-                if matched_on:
-                    matches.append(
-                        DocumentMatch(
-                            document_id=model.id,
-                            title=model.title,
-                            source_file=model.filename,
-                            content_hash=model.content_hash,
-                            matched_on=matched_on,
-                        )
-                    )
-        return matches
+            model = session.scalar(
+                select(DocumentModel).where(
+                    DocumentModel.filename == filename,
+                    DocumentModel.status == STATUS_INDEXED,
+                )
+            )
+            return _to_record(model) if model else None
+
+    def get_by_title(self, title: str) -> DocumentRecord | None:
+        """Look up an indexed document by title, case-insensitive.
+
+        Only STATUS_INDEXED rows are considered — a pending or failed row has
+        no usable chunks in Qdrant yet, so it isn't really "in the library".
+        """
+        with self._session() as session:
+            model = session.scalar(
+                select(DocumentModel).where(
+                    func.lower(DocumentModel.title) == title.strip().lower(),
+                    DocumentModel.status == STATUS_INDEXED,
+                )
+            )
+            return _to_record(model) if model else None
 
     def list_documents(
         self,
