@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from regulations_rag.repositories.vector_store import ChunkRecord, DocumentMatch, DocumentSummary, VectorStore
+from regulations_rag.repositories.vector_store import ChunkRecord, VectorStore
 
 
 def make_client(points):
@@ -32,93 +32,6 @@ def test_ensure_collection_creates_document_id_index():
             "field_schema": vector_store_module.PayloadSchemaType.KEYWORD,
         }
     ]
-
-
-def test_list_documents_dedupes_by_document_id():
-    points = [
-        make_point(
-            {
-                "document_id": "doc-1",
-                "title": "PPWR",
-                "source_file": "ppwr.pdf",
-                "content_hash": "abc",
-            }
-        ),
-        make_point(
-            {
-                "document_id": "doc-1",
-                "title": "PPWR",
-                "source_file": "ppwr.pdf",
-                "content_hash": "abc",
-            }
-        ),
-    ]
-    store = VectorStore(make_client(points))
-
-    documents = store.list_documents()
-
-    assert documents == [
-        DocumentSummary(
-            document_id="doc-1",
-            title="PPWR",
-            source_file="ppwr.pdf",
-            content_hash="abc",
-        )
-    ]
-
-
-def test_list_documents_skips_points_without_document_id():
-    points = [make_point({"title": "REACH", "source_file": "reach.pdf", "content_hash": "cafe"})]
-    store = VectorStore(make_client(points))
-
-    assert store.list_documents() == []
-
-
-def test_find_matches_by_hash_filename_and_title():
-    points = [
-        make_point(
-            {
-                "document_id": "doc-1",
-                "title": "PPWR",
-                "source_file": "ppwr.pdf",
-                "content_hash": "abc",
-            }
-        )
-    ]
-    store = VectorStore(make_client(points))
-
-    exact_hash = store.find_matches("abc", "different.pdf", "Different Title")
-    assert exact_hash == [
-        DocumentMatch(
-            document_id="doc-1",
-            title="PPWR",
-            source_file="ppwr.pdf",
-            content_hash="abc",
-            matched_on=["hash"],
-        )
-    ]
-
-    filename_match = store.find_matches("xyz", "ppwr.pdf", "Different Title")
-    assert filename_match[0].matched_on == ["filename"]
-
-    title_match = store.find_matches("xyz", "different.pdf", "ppwr")
-    assert title_match[0].matched_on == ["title"]
-
-
-def test_find_matches_returns_empty_when_nothing_matches():
-    points = [
-        make_point(
-            {
-                "document_id": "doc-1",
-                "title": "PPWR",
-                "source_file": "ppwr.pdf",
-                "content_hash": "abc",
-            }
-        )
-    ]
-    store = VectorStore(make_client(points))
-
-    assert store.find_matches("xyz", "reach.pdf", "REACH") == []
 
 
 def test_get_document_point_ids_returns_matching_ids():

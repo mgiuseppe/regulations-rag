@@ -201,6 +201,36 @@ class DocumentsRepository:
             )
             return _to_record(model) if model else None
 
+    def get_by_filename(self, filename: str) -> DocumentRecord | None:
+        """Look up an indexed document by exact filename.
+
+        Only STATUS_INDEXED rows are considered — a pending or failed row has
+        no usable chunks in Qdrant yet, so it isn't really "in the library".
+        """
+        with self._session() as session:
+            model = session.scalar(
+                select(DocumentModel).where(
+                    DocumentModel.filename == filename,
+                    DocumentModel.status == STATUS_INDEXED,
+                )
+            )
+            return _to_record(model) if model else None
+
+    def get_by_title(self, title: str) -> DocumentRecord | None:
+        """Look up an indexed document by title, case-insensitive.
+
+        Only STATUS_INDEXED rows are considered — a pending or failed row has
+        no usable chunks in Qdrant yet, so it isn't really "in the library".
+        """
+        with self._session() as session:
+            model = session.scalar(
+                select(DocumentModel).where(
+                    func.lower(DocumentModel.title) == title.strip().lower(),
+                    DocumentModel.status == STATUS_INDEXED,
+                )
+            )
+            return _to_record(model) if model else None
+
     def list_documents(
         self,
         page: int = 1,

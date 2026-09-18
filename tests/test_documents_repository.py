@@ -92,3 +92,23 @@ def test_list_documents_sorts_and_paginates(repo):
 def test_list_documents_rejects_unknown_sort_field(repo):
     with pytest.raises(ValueError):
         repo.list_documents(sort_by="not_a_field")
+
+
+def test_get_by_filename_finds_only_indexed_documents(repo):
+    repo.create_pending("id-1", "ppwr.pdf", "PPWR", "abc")
+    repo.mark_indexed("id-1", chunk_count=3)
+    repo.create_pending("id-2", "pending.pdf", "Pending Doc", "def")
+
+    assert repo.get_by_filename("ppwr.pdf").id == "id-1"
+    assert repo.get_by_filename("pending.pdf") is None
+    assert repo.get_by_filename("does-not-exist.pdf") is None
+
+
+def test_get_by_title_finds_only_indexed_documents_case_insensitively(repo):
+    repo.create_pending("id-1", "ppwr.pdf", "PPWR", "abc")
+    repo.mark_indexed("id-1", chunk_count=3)
+    repo.create_pending("id-2", "pending.pdf", "Pending Doc", "def")
+
+    assert repo.get_by_title("ppwr").id == "id-1"
+    assert repo.get_by_title("Pending Doc") is None
+    assert repo.get_by_title("does not exist") is None
