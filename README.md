@@ -118,3 +118,34 @@ uv run pytest
 ## License
 
 TBD
+
+## Next Steps
+The current pipeline retrieves small chunks that sometimes lack enough surrounding context, and can mix passages from different regulations.
+
+The improvements below are planned in priority order.
+
+Notes: to understand if we've to change the LLM or the semantic search we need the evaluation harness
+
+### 1. Evaluation harness
+- Define golden dataset stored as jsonl (15-20 questions, paired with article/document)
+- Measure retrieval accuracy (recall@k)
+- Setup evals with promptfoo
+- Later: score with an LLM-as-a-judge (RAGAS)
+
+### 2. Try different models (LLM or embedding)
+- I'm currently using gpt-5-nano, we should try another one (only if retrieved chunks are the right ones)
+- I'm currently using text-embedding-3-small try a larger one (only if chunks are missing / wrong)
+  
+### 3. Test small-to-big retrieval
+decouple what we search on from what we feed the model.
+- chunk-window (i-2...i+2)
+- parent-document (retrieved from postgres by id) 
+
+### 4. Prompt constraints
+- Instruct the model to keep sources separate and cite which regulation each statement comes from
+
+### 5. Hybrid search
+- dense + sparse/BM25 (recommendended for legal text, because they depend on exact tokens that pure semantic search blurs, qdrant support sparse vector and you can fuse results with a technique called Reciprocal Rank Fusion)
+
+### 6. Reranking
+- re-ranking with cross-encoder
